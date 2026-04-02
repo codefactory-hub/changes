@@ -1,0 +1,54 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .dist
+          if [ -f .config/changes/config.toml ]; then
+            go run ./cmd/changes changelog rebuild --output .dist/release-notes.md
+          else
+            printf '# %s\n\nRelease notes placeholder. Commit repo-local `changes` config and templates before enabling generated release notes.\n' "${GITHUB_REF_NAME}" > .dist/release-notes.md
+          fi
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --release-notes .dist/release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHANGES_GITHUB_OWNER: ${{ vars.CHANGES_GITHUB_OWNER }}
+          CHANGES_GITHUB_REPO: ${{ vars.CHANGES_GITHUB_REPO }}
+          CHANGES_PROJECT_HOMEPAGE: ${{ vars.CHANGES_PROJECT_HOMEPAGE }}
+          CHANGES_HOMEBREW_TAP_OWNER: ${{ vars.CHANGES_HOMEBREW_TAP_OWNER }}
+          CHANGES_HOMEBREW_TAP_REPO: ${{ vars.CHANGES_HOMEBREW_TAP_REPO }}
+          CHANGES_HOMEBREW_TAP_BRANCH: ${{ vars.CHANGES_HOMEBREW_TAP_BRANCH }}
+          CHANGES_HOMEBREW_TAP_TOKEN: ${{ secrets.CHANGES_HOMEBREW_TAP_TOKEN }}
+          CHANGES_RELEASE_BOT_NAME: ${{ vars.CHANGES_RELEASE_BOT_NAME }}
+          CHANGES_RELEASE_BOT_EMAIL: ${{ vars.CHANGES_RELEASE_BOT_EMAIL }}

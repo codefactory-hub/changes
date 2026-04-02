@@ -1,0 +1,19 @@
+[project]
+  name = "changes"
+  changelog_file = "CHANGELOG.md"
+  initial_version = "0.1.0"
+
+[paths]
+  data_dir = ".local/share/changes"
+  state_dir = ".local/state/changes"
+  templates_dir = ".local/share/changes/templates"
+
+[render]
+  max_chars = 4000
+  drop_policy = "drop_whole_entries_from_bottom"
+  omission_notice = "Additional entries omitted for length."
+  release_template = "release.md.tmpl"
+  entry_template = "entry.md.tmpl"
+
+[versioning]
+  prerelease_label = "rc"
