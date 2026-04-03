@@ -8,6 +8,8 @@ Accepted
 
 `changes` is intended to run inside arbitrary repositories while keeping changelog state durable, reviewable, and recoverable. Traditional destructive release-note flows make preview releases awkward and make historical repairs expensive because the source artifacts disappear once consumed.
 
+`changes` is fragment-centric. External changelog formats are generated views over canonical fragment and manifest data rather than first-class source-of-truth files.
+
 ## Decision
 
 ### Repo-local XDG-style layout
@@ -33,21 +35,22 @@ Each release writes a manifest that freezes:
 - the emitted version
 - the stable target version
 - preview versus stable channel
-- whether the manifest consumes fragments globally
-- the chosen render template
-- the specific fragment IDs included
+- the immediate `parent_version` within that release line
+- the specific `added_fragment_ids` introduced by that release record
 
 Manifests are the durable release boundary. Rendering and changelog rebuilds derive from manifests plus fragments plus templates.
 
+Built-in template packs may target repository Markdown, release bodies, or package-manager-style changelog text, but those outputs remain render-time views. They must not influence fragment selection or release lineage semantics.
+
 ### Preview semantics
 
-Preview manifests do not consume fragments globally. They only establish line-local history. A later preview in the same line excludes fragments already referenced in that line, while a new prerelease line starts fresh from the globally unreleased fragment set.
+Preview manifests do not carry a separate consumption flag. They establish line-local history through `parent_version`. A later preview in the same line excludes fragments already reachable from that line’s parent chain, while a new prerelease line starts fresh from the globally stable-unreleased fragment set.
 
 This preserves accurate RC deltas without losing the ability to produce a final stable release from the same source fragments.
 
 ### Stable semantics
 
-Stable manifests consume fragments logically by reference. Fragments referenced by consuming stable manifests are no longer globally unreleased for future stable recommendations.
+Stable manifests form their own parent-linked chain. Fragments reachable from the latest stable head are no longer globally unreleased for future stable recommendations.
 
 ### First-release semver policy
 

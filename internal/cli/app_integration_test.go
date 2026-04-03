@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/example/changes/internal/config"
 	"github.com/example/changes/internal/releases"
 )
 
@@ -33,7 +34,7 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 
 	assertExists(t, filepath.Join(repoRoot, ".config/changes/config.toml"))
-	assertExists(t, filepath.Join(repoRoot, ".local/share/changes/templates/release.md.tmpl"))
+	assertExists(t, filepath.Join(repoRoot, ".local/share/changes/templates/repository-markdown-release.md.tmpl"))
 
 	gitignore, err := os.ReadFile(filepath.Join(repoRoot, ".gitignore"))
 	if err != nil {
@@ -83,6 +84,23 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 
 	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"render", "profiles"}); err != nil {
+		t.Fatalf("render profiles returned error: %v", err)
+	}
+	profilesOut := stdout.String()
+	for _, name := range []string{
+		config.RenderProfileRepositoryMarkdown,
+		config.RenderProfileGitHubRelease,
+		config.RenderProfileTesterSummary,
+		config.RenderProfileDebianChangelog,
+		config.RenderProfileRPMChangelog,
+	} {
+		if !strings.Contains(profilesOut, name) {
+			t.Fatalf("render profiles missing %s:\n%s", name, profilesOut)
+		}
+	}
+
+	stdout.Reset()
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 16, 0, 0, 0, time.UTC)
 	}
@@ -94,21 +112,58 @@ func TestAppEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load preview manifest: %v", err)
 	}
-	if previewManifest.Consumes {
-		t.Fatalf("preview manifest should not consume fragments")
+	if previewManifest.ParentVersion != "" {
+		t.Fatalf("first preview should not have a parent, got %q", previewManifest.ParentVersion)
 	}
 
 	stdout.Reset()
-	if err := app.Run(context.Background(), []string{"render", "--version", "0.1.0-rc.1"}); err != nil {
-		t.Fatalf("render returned error: %v", err)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 2, 16, 30, 0, 0, time.UTC)
 	}
-	if !strings.Contains(stdout.String(), "Fix release note rendering") {
-		t.Fatalf("render output missing fragment title:\n%s", stdout.String())
+	app.Random = bytes.NewReader([]byte{8, 9, 10, 11})
+	if err := app.Run(context.Background(), []string{
+		"add",
+		"--title", "Add tester profile",
+		"--type", "added",
+		"--bump", "minor",
+		"--body", "Introduce concise tester rendering.",
+	}); err != nil {
+		t.Fatalf("second add returned error: %v\nstderr=%s", err, stderr.String())
 	}
 
 	stdout.Reset()
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 17, 0, 0, 0, time.UTC)
+	}
+	if err := app.Run(context.Background(), []string{"release", "create", "--channel", "preview", "--pre", "rc"}); err != nil {
+		t.Fatalf("release create preview 2 returned error: %v", err)
+	}
+	preview2Path := strings.TrimSpace(stdout.String())
+	preview2Manifest, err := releases.Load(preview2Path)
+	if err != nil {
+		t.Fatalf("load preview2 manifest: %v", err)
+	}
+	if preview2Manifest.ParentVersion != previewManifest.Version {
+		t.Fatalf("preview 2 parent = %q, want %q", preview2Manifest.ParentVersion, previewManifest.Version)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"render", "--version", "0.1.0-rc.2", "--profile", config.RenderProfileGitHubRelease}); err != nil {
+		t.Fatalf("render github returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "# Release 0.1.0-rc.2") {
+		t.Fatalf("github render missing expected heading:\n%s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Add tester profile") {
+		t.Fatalf("github render should include only the second release delta:\n%s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "Fix release note rendering") {
+		t.Fatalf("github render should not include the parent delta:\n%s", stdout.String())
+	}
+
+	stdout.Reset()
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 2, 18, 0, 0, 0, time.UTC)
 	}
 	if err := app.Run(context.Background(), []string{"release", "create", "--channel", "stable"}); err != nil {
 		t.Fatalf("release create stable returned error: %v", err)
@@ -118,8 +173,19 @@ func TestAppEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load stable manifest: %v", err)
 	}
-	if !stableManifest.Consumes {
-		t.Fatalf("stable manifest should consume fragments")
+	if stableManifest.ParentVersion != "" {
+		t.Fatalf("first stable should not have a parent, got %q", stableManifest.ParentVersion)
+	}
+	if got := stableManifest.AddedFragmentIDs; len(got) != 2 {
+		t.Fatalf("stable added_fragment_ids = %#v, want both fragments", got)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"render", "--version", "0.1.0", "--profile", config.RenderProfileDebianChangelog}); err != nil {
+		t.Fatalf("render debian returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "changes (0.1.0) unstable; urgency=medium") {
+		t.Fatalf("debian render missing expected header:\n%s", stdout.String())
 	}
 
 	stdout.Reset()
@@ -131,8 +197,8 @@ func TestAppEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read changelog: %v", err)
 	}
-	if !strings.Contains(string(changelogBytes), "## 0.1.0 (stable)") {
-		t.Fatalf("changelog missing release heading:\n%s", changelogBytes)
+	if !strings.Contains(string(changelogBytes), "# Changelog") || !strings.Contains(string(changelogBytes), "## 0.1.0 (stable)") {
+		t.Fatalf("changelog missing expected content:\n%s", changelogBytes)
 	}
 
 	stdout.Reset()

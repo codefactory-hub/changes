@@ -8,12 +8,56 @@
   state_dir = ".local/state/changes"
   templates_dir = ".local/share/changes/templates"
 
-[render]
+[render_profiles.repository_markdown]
+  description = "Repository changelog in Markdown generated from the stable release chain."
+  mode = "release_chain"
+  document_header = "# Changelog"
+  release_template = "repository-markdown-release.md.tmpl"
+  entry_template = "release-entry.md.tmpl"
+  max_chars = 0
+  omission_notice = "Additional releases omitted for length."
+
+[render_profiles.github_release]
+  description = "Markdown release body for GitHub or GitLab releases."
+  mode = "single_release"
+  release_template = "github-release.md.tmpl"
+  entry_template = "release-entry.md.tmpl"
   max_chars = 4000
-  drop_policy = "drop_whole_entries_from_bottom"
-  omission_notice = "Additional entries omitted for length."
-  release_template = "release.md.tmpl"
-  entry_template = "entry.md.tmpl"
+  omission_notice = "Additional content omitted for length."
+
+[render_profiles.tester_summary]
+  description = "Concise tester-facing release summary."
+  mode = "single_release"
+  release_template = "tester-summary-release.md.tmpl"
+  entry_template = "tester-summary-entry.md.tmpl"
+  max_chars = 8000
+  omission_notice = "Additional content omitted for length."
+
+[render_profiles.debian_changelog]
+  description = "Debian-style changelog text generated from a single release record."
+  mode = "single_release"
+  release_template = "debian-changelog.tmpl"
+  entry_template = "package-entry.tmpl"
+  max_chars = 0
+  omission_notice = ""
+
+  [render_profiles.debian_changelog.metadata]
+    distribution = "unstable"
+    urgency = "medium"
+    maintainer_name = "Changes Release Bot"
+    maintainer_email = "changes@example.invalid"
+
+[render_profiles.rpm_changelog]
+  description = "RPM-style changelog text generated from a single release record."
+  mode = "single_release"
+  release_template = "rpm-changelog.tmpl"
+  entry_template = "package-entry.tmpl"
+  max_chars = 0
+  omission_notice = ""
+
+  [render_profiles.rpm_changelog.metadata]
+    maintainer_name = "Changes Release Bot"
+    maintainer_email = "changes@example.invalid"
 
 [versioning]
   prerelease_label = "rc"

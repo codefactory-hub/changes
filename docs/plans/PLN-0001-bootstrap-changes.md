@@ -14,7 +14,7 @@ The first layer includes:
 - `changes render`
 - `changes changelog rebuild`
 - default repo-local templates
-- tests for fragment naming, versioning, manifest consumption semantics, render truncation, and changelog determinism
+- tests for fragment naming, versioning, parent-linked manifest lineage, render-profile truncation, and changelog determinism
 - GoReleaser and GitHub Actions bootstrap for binary delivery and private Homebrew cask publishing
 
 ## Non-goals
@@ -32,9 +32,11 @@ The first layer includes:
 - `.local/state/changes` is transient and ignored.
 - Fragments are durable artifacts and are not deleted when released.
 - Release manifests freeze fragment selection at release creation time.
-- Preview releases are line-local deltas and do not consume fragments globally.
-- Stable releases consume fragments logically through the manifest graph.
-- Rendering must enforce `max_chars` by dropping complete entries from the bottom only.
+- Release manifests are append-only, parent-linked selection records that store only the fragment IDs newly added by that release record.
+- Preview releases are line-local deltas anchored to their own preview lineage.
+- Stable releases remain on the stable lineage even when previews exist for the same target.
+- Rendering policy lives in named render profiles, not in release manifests.
+- Multi-release rendering must enforce `max_chars` by dropping complete release records from the bottom only.
 
 ## Follow-up work
 

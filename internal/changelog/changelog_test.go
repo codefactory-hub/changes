@@ -25,24 +25,19 @@ func TestRebuildDeterministic(t *testing.T) {
 	}
 	manifests := []releases.Manifest{
 		{
-			Version:       "0.2.0",
-			TargetVersion: "0.2.0",
-			Channel:       releases.ChannelStable,
-			Consumes:      true,
-			CreatedAt:     time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
-			MaxChars:      4000,
-			Template:      cfg.Render.ReleaseTemplate,
-			FragmentIDs:   []string{"f2"},
+			Version:          "0.2.0",
+			TargetVersion:    "0.2.0",
+			Channel:          releases.ChannelStable,
+			ParentVersion:    "0.1.0",
+			CreatedAt:        time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
+			AddedFragmentIDs: []string{"f2"},
 		},
 		{
-			Version:       "0.1.0",
-			TargetVersion: "0.1.0",
-			Channel:       releases.ChannelStable,
-			Consumes:      true,
-			CreatedAt:     time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
-			MaxChars:      4000,
-			Template:      cfg.Render.ReleaseTemplate,
-			FragmentIDs:   []string{"f1"},
+			Version:          "0.1.0",
+			TargetVersion:    "0.1.0",
+			Channel:          releases.ChannelStable,
+			CreatedAt:        time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
+			AddedFragmentIDs: []string{"f1"},
 		},
 	}
 

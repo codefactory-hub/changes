@@ -2,6 +2,8 @@
 
 `changes` is a fragment-driven changelog and release-notes CLI for Git repositories. It is inspired by Changesets in spirit, but uses repo-local XDG-style directories, durable fragments, and per-release manifests instead of destructive fragment deletion.
 
+`changes` is fragment-centric. External changelog formats are views generated from fragments plus release manifests; they are not the source of truth.
+
 ## Repository-local layout
 
 Committed:
@@ -25,28 +27,35 @@ changes add --title ... --type fixed --bump patch --body ...
 changes status
 changes version next [--pre rc]
 changes release create [--channel preview|stable] [--pre rc] [--version ...]
-changes render --version 1.2.0-rc.1 [--output path]
+changes render --version 1.2.0-rc.1 [--profile github_release] [--output path]
+changes render profiles
 changes changelog rebuild [--output path]
 ```
 
 ## Model
 
 - Fragments are durable source records. They are not deleted when a release happens.
-- Release manifests freeze the fragment IDs chosen for a specific release.
-- Preview manifests do not consume fragments globally.
-- Stable manifests consume fragments logically by reference, which keeps historical rebuilds possible.
-- Preview release lines consume within their own line only. `1.2.0-rc.2` does not repeat what `1.2.0-rc.1` already referenced, while `1.2.0-beta.1` starts a fresh line and can show the same stable-unreleased fragments again.
+- Release manifests are append-only selection records.
+- Each manifest stores only `added_fragment_ids` for that release plus an optional `parent_version`.
+- Preview and stable releases each form their own parent-linked lineages.
+- A later preview in the same line excludes fragments already reachable from its preview parent chain.
+- A final stable release recomputes from the previous stable head, not from the preview chain.
 
 ## Semver behavior in the first layer
 
 - If no stable release exists, `project.initial_version` is the first stable baseline.
-- Unreleased fragments not referenced by any consuming stable manifest determine the highest pending bump.
+- Unreleased fragments not reachable from the latest stable head determine the highest pending bump.
 - Stable suggestion uses `major > minor > patch` precedence.
 - Preview suggestion targets the next stable version and increments the prerelease number within the same release line.
 
-## Limit handling
+## Rendering
 
-Rendering enforces `render.max_chars` by dropping whole rendered entries from the bottom of the ordered entry list. It never truncates inside an entry body. When dropping occurs, the configured omission notice is appended.
+- Render behavior is configured through named template packs in `.config/changes/config.toml`.
+- The built-in packs are `repository_markdown`, `github_release`, `tester_summary`, `debian_changelog`, and `rpm_changelog`.
+- Single-release packs render only the selected release record.
+- Chain-style packs walk `parent_version` backward from the chosen head.
+- Multi-release trimming drops whole release blocks from the tail of the rendered chain. It never truncates inside an entry body.
+- Repo-local template files override the built-in pack templates without changing manifest semantics.
 
 ## Development
 
@@ -55,10 +64,7 @@ This repo is intentionally bootstrapped with a modest standard-library-first CLI
 Useful local commands:
 
 ```bash
-env GOCACHE=$PWD/.local/state/changes/gocache \
-  GOPATH=$PWD/.local/state/changes/gopath \
-  GOMODCACHE=$PWD/.local/state/changes/gomodcache \
-  go test ./...
+go test ./...
 ```
 
 ## Release automation
