@@ -128,7 +128,7 @@ func WriteDraftBatch(repoRoot string, cfg config.Config, inputPath string, resul
 
 		for idx, section := range sections {
 			sectionCreatedAt := collectedAt.Add(time.Duration(idx) * time.Second)
-			id, err := fragments.GenerateID(sectionCreatedAt, section.Title, random)
+			id, err := fragments.GenerateID(random)
 			if err != nil {
 				return DraftBatch{}, fmt.Errorf("generate draft fragment id: %w", err)
 			}
@@ -137,14 +137,13 @@ func WriteDraftBatch(repoRoot string, cfg config.Config, inputPath string, resul
 				Metadata: fragments.Metadata{
 					ID:        id,
 					CreatedAt: sectionCreatedAt,
-					Title:     section.Title,
 					Type:      section.Type,
 					Bump:      section.Bump,
 					Breaking:  section.Breaking,
 					Scopes:    []string{"collect-changes", productSlug, result.Source.ID},
 					Authors:   []string{"changes collect drafts"},
 				},
-				Body: section.Body,
+				Body: explicitDraftBody(section.Title, section.Body),
 				Path: filepath.Join(fragmentsDir, id+".md"),
 			}
 			if err := item.Validate(); err != nil {
@@ -152,6 +151,9 @@ func WriteDraftBatch(repoRoot string, cfg config.Config, inputPath string, resul
 			}
 			if err := os.WriteFile(item.Path, []byte(item.Format()), 0o644); err != nil {
 				return DraftBatch{}, fmt.Errorf("write collect-changes draft fragment %s: %w", section.Title, err)
+			}
+			if err := os.Chtimes(item.Path, item.CreatedAt, item.CreatedAt); err != nil {
+				return DraftBatch{}, fmt.Errorf("set collect-changes draft fragment timestamp %s: %w", section.Title, err)
 			}
 			drafts = append(drafts, item)
 		}
@@ -242,6 +244,19 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func explicitDraftBody(title, body string) string {
+	title = strings.TrimSpace(title)
+	body = strings.TrimSpace(body)
+	switch {
+	case title == "":
+		return body
+	case body == "":
+		return title
+	default:
+		return title + "\n\n" + body
+	}
 }
 
 func fallbackSection(result Result) extractedSection {

@@ -229,7 +229,7 @@ func buildSourceReleaseRecords(result Result, sourceFragments []fragments.Fragme
 func orderFragmentsBySectionTitle(sourceFragments []fragments.Fragment, sections []extractedSection) []fragments.Fragment {
 	fragmentByTitle := map[string][]fragments.Fragment{}
 	for _, item := range sourceFragments {
-		fragmentByTitle[item.Title] = append(fragmentByTitle[item.Title], item)
+		fragmentByTitle[item.BodyPreview()] = append(fragmentByTitle[item.BodyPreview()], item)
 	}
 	for title := range fragmentByTitle {
 		queue := fragmentByTitle[title]

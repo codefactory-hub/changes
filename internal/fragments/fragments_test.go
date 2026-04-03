@@ -8,13 +8,12 @@ import (
 )
 
 func TestGenerateID(t *testing.T) {
-	now := time.Date(2026, 4, 2, 15, 30, 45, 0, time.UTC)
-	id, err := GenerateID(now, "Fix release note rendering", bytes.NewReader([]byte{0, 1, 2, 3}))
+	id, err := GenerateID(bytes.NewReader([]byte{0, 1, 2}))
 	if err != nil {
 		t.Fatalf("GenerateID returned error: %v", err)
 	}
 
-	const want = "20260402T153045Z--fix-release-note-rendering--abcd"
+	const want = "amber-beacon-carries"
 	if id != want {
 		t.Fatalf("GenerateID = %q, want %q", id, want)
 	}
@@ -23,9 +22,8 @@ func TestGenerateID(t *testing.T) {
 func TestFormatParseRoundTrip(t *testing.T) {
 	item := Fragment{
 		Metadata: Metadata{
-			ID:                   "20260402T153045Z--fix-release-note-rendering--abcd",
+			ID:                   "amber-beacon-carries",
 			CreatedAt:            time.Date(2026, 4, 2, 15, 30, 45, 0, time.UTC),
-			Title:                "Fix release note rendering",
 			Type:                 "fixed",
 			Bump:                 "patch",
 			Scopes:               []string{"release"},
@@ -48,13 +46,13 @@ func TestFormatParseRoundTrip(t *testing.T) {
 		t.Fatalf("Parse returned error: %v", err)
 	}
 
-	if parsed.ID != item.ID || parsed.Title != item.Title || parsed.Body != item.Body {
+	if parsed.ID != "" || parsed.Body != item.Body {
 		t.Fatalf("Parse(Format()) mismatch: got %#v want %#v", parsed, item)
 	}
 	if parsed.SectionKey != item.SectionKey || parsed.Area != item.Area || parsed.DisplayOrder != item.DisplayOrder {
 		t.Fatalf("Parse(Format()) metadata mismatch: got %#v want %#v", parsed.Metadata, item.Metadata)
 	}
-	if !strings.Contains(raw, "title = \"Fix release note rendering\"") {
-		t.Fatalf("formatted fragment missing title: %s", raw)
+	if strings.Contains(raw, "title = ") || strings.Contains(raw, "id = ") || strings.Contains(raw, "created_at = ") {
+		t.Fatalf("formatted fragment should omit derived metadata: %s", raw)
 	}
 }

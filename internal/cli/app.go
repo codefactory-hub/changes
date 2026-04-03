@@ -42,6 +42,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return a.fail(fmt.Errorf("usage: changes <command>"))
 	}
+	if isHelpArg(args[0]) {
+		a.printHelp(args[1:])
+		return nil
+	}
+	if isHelpArg(args[len(args)-1]) && len(args) == 1 {
+		a.printHelp(nil)
+		return nil
+	}
 
 	handled, err := a.runOptionalCommand(ctx, args)
 	if err != nil {
@@ -79,6 +87,10 @@ func (a *App) Run(ctx context.Context, args []string) error {
 }
 
 func (a *App) runInit(ctx context.Context, args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"init"})
+		return nil
+	}
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
@@ -132,10 +144,13 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 }
 
 func (a *App) runAdd(ctx context.Context, args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"add"})
+		return nil
+	}
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	var title string
 	var kind string
 	var bump string
 	var body string
@@ -151,7 +166,6 @@ func (a *App) runAdd(ctx context.Context, args []string) error {
 	var releaseNotesPriority int
 	var displayOrder int
 
-	fs.StringVar(&title, "title", "", "Fragment title")
 	fs.StringVar(&kind, "type", "changed", "Fragment type")
 	fs.StringVar(&bump, "bump", "patch", "Version bump (patch|minor|major)")
 	fs.StringVar(&body, "body", "", "Fragment body")
@@ -171,9 +185,6 @@ func (a *App) runAdd(ctx context.Context, args []string) error {
 		return err
 	}
 
-	if strings.TrimSpace(title) == "" {
-		return fmt.Errorf("add: --title is required")
-	}
 	if strings.TrimSpace(body) == "" {
 		return fmt.Errorf("add: --body is required in the first layer; editor-based authoring is a documented follow-up")
 	}
@@ -189,7 +200,6 @@ func (a *App) runAdd(ctx context.Context, args []string) error {
 	}
 
 	item, err := fragments.Create(repoRoot, cfg, a.Now(), a.Random, fragments.NewInput{
-		Title:                title,
 		Type:                 kind,
 		Bump:                 normalizedBump,
 		Breaking:             breaking,
@@ -214,6 +224,10 @@ func (a *App) runAdd(ctx context.Context, args []string) error {
 }
 
 func (a *App) runStatus(ctx context.Context, args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"status"})
+		return nil
+	}
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
@@ -259,7 +273,7 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	if len(unreleased) > 0 {
 		_, _ = fmt.Fprintln(a.Stdout, "Pending fragments:")
 		for _, item := range unreleased {
-			_, _ = fmt.Fprintf(a.Stdout, "- %s [%s/%s] %s\n", item.ID, item.Type, item.Bump, item.Title)
+			_, _ = fmt.Fprintf(a.Stdout, "- %s [%s/%s] %s\n", item.ID, item.Type, item.Bump, item.BodyPreview())
 		}
 	}
 
@@ -267,6 +281,14 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 }
 
 func (a *App) runVersion(ctx context.Context, args []string) error {
+	if len(args) == 1 && isHelpArg(args[0]) {
+		a.printHelp([]string{"version"})
+		return nil
+	}
+	if len(args) >= 2 && args[0] == "next" && wantsHelp(args[1:]) {
+		a.printHelp([]string{"version", "next"})
+		return nil
+	}
 	if len(args) == 0 || args[0] != "next" {
 		return fmt.Errorf("usage: changes version next [--pre label]")
 	}
@@ -310,6 +332,10 @@ func (a *App) runVersion(ctx context.Context, args []string) error {
 }
 
 func (a *App) runRelease(ctx context.Context, args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"release"})
+		return nil
+	}
 	fs := flag.NewFlagSet("release", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -375,8 +401,20 @@ func (a *App) runRelease(ctx context.Context, args []string) error {
 }
 
 func (a *App) runRender(ctx context.Context, args []string) error {
+	if len(args) == 1 && isHelpArg(args[0]) {
+		a.printHelp([]string{"render"})
+		return nil
+	}
+	if len(args) > 0 && args[0] == "profiles" && wantsHelp(args[1:]) {
+		a.printHelp([]string{"render", "profiles"})
+		return nil
+	}
 	if len(args) > 0 && args[0] == "profiles" {
 		return a.runRenderProfiles(ctx, args[1:])
+	}
+	if wantsHelp(args) {
+		a.printHelp([]string{"render"})
+		return nil
 	}
 
 	fs := flag.NewFlagSet("render", flag.ContinueOnError)
@@ -451,6 +489,10 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 }
 
 func (a *App) runResolve(ctx context.Context, args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"resolve"})
+		return nil
+	}
 	fs := flag.NewFlagSet("resolve", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -517,6 +559,10 @@ func (a *App) runResolve(ctx context.Context, args []string) error {
 }
 
 func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"render", "profiles"})
+		return nil
+	}
 	fs := flag.NewFlagSet("render profiles", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	if err := fs.Parse(args); err != nil {
@@ -535,6 +581,14 @@ func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
 }
 
 func (a *App) runChangelog(ctx context.Context, args []string) error {
+	if len(args) == 1 && isHelpArg(args[0]) {
+		a.printHelp([]string{"changelog"})
+		return nil
+	}
+	if len(args) >= 2 && args[0] == "rebuild" && wantsHelp(args[1:]) {
+		a.printHelp([]string{"changelog", "rebuild"})
+		return nil
+	}
 	if len(args) == 0 || args[0] != "rebuild" {
 		return fmt.Errorf("usage: changes changelog rebuild")
 	}
@@ -620,6 +674,145 @@ func (a *App) loadState(repoRoot string, cfg config.Config) ([]fragments.Fragmen
 func (a *App) fail(err error) error {
 	_, _ = fmt.Fprintf(a.Stderr, "error: %v\n", err)
 	return err
+}
+
+func isHelpArg(arg string) bool {
+	return arg == "--help" || arg == "-h" || arg == "help"
+}
+
+func wantsHelp(args []string) bool {
+	for _, arg := range args {
+		if isHelpArg(arg) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) printHelp(path []string) {
+	var body string
+	switch strings.Join(path, " ") {
+	case "":
+		body = strings.TrimSpace(`
+changes is a fragment-driven changelog and release-notes CLI.
+
+Usage:
+  changes <command> [options]
+
+Commands:
+  init
+  add
+  status
+  version next
+  release
+  resolve
+  render
+  render profiles
+  changelog rebuild
+
+Use "changes help <command>" or "changes <command> --help" for details.
+`)
+	case "init":
+		body = strings.TrimSpace(`
+Usage:
+  changes init
+
+Initialize repo-local config, templates, changelog, and state directories.
+`)
+	case "add":
+		body = strings.TrimSpace(`
+Usage:
+  changes add --type <kind> --bump <patch|minor|major> --body <text> [options]
+
+Options:
+  --scope <value>                 Repeatable fragment scope
+  --section-key <value>           Section key for rendering
+  --area <value>                  Product area hint
+  --platform <value>              Repeatable platform hint
+  --audience <value>              Repeatable audience hint
+  --customer-visible              Mark entry as customer visible
+  --support-relevance             Mark entry as support relevant
+  --requires-action               Mark entry as requiring operator action
+  --release-notes-priority <n>    Priority for release-note inclusion
+  --display-order <n>             Order within a section
+  --breaking                      Mark entry as breaking
+`)
+	case "status":
+		body = strings.TrimSpace(`
+Usage:
+  changes status
+
+Show unreleased fragment counts, the highest pending bump, the recommended next stable version, and active prerelease heads.
+`)
+	case "version":
+		body = strings.TrimSpace(`
+Usage:
+  changes version next [--pre <label>]
+
+Print the next recommended final or prerelease version.
+`)
+	case "version next":
+		body = strings.TrimSpace(`
+Usage:
+  changes version next [--pre <label>]
+
+Examples:
+  changes version next
+  changes version next --pre rc
+`)
+	case "release":
+		body = strings.TrimSpace(`
+Usage:
+  changes release [--version <version>] [--pre <label>]
+
+Create a base release record for the selected release.
+`)
+	case "resolve":
+		body = strings.TrimSpace(`
+Usage:
+  changes resolve --version <version> [--product <name>] [--format json] [--output <path>]
+
+Assemble and emit the ReleaseBundle for one release.
+`)
+	case "render":
+		body = strings.TrimSpace(`
+Usage:
+  changes render --version <version> [--product <name>] [--profile <name>] [--output <path>]
+  changes render --record <path> [--profile <name>] [--output <path>]
+  changes render profiles
+
+Render one release or a release lineage through the selected template pack.
+`)
+	case "render profiles":
+		body = strings.TrimSpace(`
+Usage:
+  changes render profiles
+
+List the available render profiles.
+`)
+	case "changelog":
+		body = strings.TrimSpace(`
+Usage:
+  changes changelog rebuild [--output <path>]
+
+Rebuild the repository changelog from the current final release lineage.
+`)
+	case "changelog rebuild":
+		body = strings.TrimSpace(`
+Usage:
+  changes changelog rebuild [--output <path>]
+
+Rebuild the repository changelog from the current final release lineage.
+`)
+	default:
+		body = strings.TrimSpace(`
+Usage:
+  changes <command> [options]
+
+Use "changes help" to see the available commands.
+`)
+	}
+	_, _ = fmt.Fprintln(a.Stdout, body)
 }
 
 func recommendedStableVersion(cfg config.Config, records []releases.ReleaseRecord, product string, pending []fragments.Fragment) (versioning.Version, error) {

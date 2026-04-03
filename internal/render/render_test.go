@@ -46,7 +46,7 @@ func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 		AddedFragmentIDs: []string{"f1"},
 	}
 	allFragments := []fragments.Fragment{
-		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC), Title: "Short title", Type: "fixed", Bump: "patch"}, Body: "first body"},
+		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC), Type: "fixed", Bump: "patch"}, Body: "first body"},
 	}
 	bundle, err := releases.AssembleRelease(record, []releases.ReleaseRecord{record}, allFragments)
 	if err != nil {
@@ -92,8 +92,8 @@ func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 	if !strings.Contains(githubOutput, "# Release 0.1.0") {
 		t.Fatalf("github output missing heading: %s", githubOutput)
 	}
-	if strings.Contains(testerOutput, "first body") {
-		t.Fatalf("tester output should use concise entry template: %s", testerOutput)
+	if !strings.Contains(testerOutput, "- first body") {
+		t.Fatalf("tester output should render the body preview: %s", testerOutput)
 	}
 	if !strings.Contains(debianOutput, "changes (0.1.0) unstable; urgency=medium") {
 		t.Fatalf("debian output missing expected header: %s", debianOutput)
@@ -123,11 +123,11 @@ func TestRenderChainDropsWholeReleaseBlocks(t *testing.T) {
 		Bundles: []releases.ReleaseBundle{
 			{
 				Release:  releases.ReleaseRecord{Product: "changes", Version: "0.2.0"},
-				Sections: []releases.BundleSection{{Key: "fixed", Title: "Fixed", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f1", Title: "Keep me", Type: "fixed", Bump: "patch", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "short"}}}}},
+				Sections: []releases.BundleSection{{Key: "fixed", Title: "Fixed", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f1", Type: "fixed", Bump: "patch", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "short"}}}}},
 			},
 			{
 				Release:  releases.ReleaseRecord{Product: "changes", Version: "0.1.0"},
-				Sections: []releases.BundleSection{{Key: "added", Title: "Added", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f2", Title: "Drop me because this block is very long", Type: "added", Bump: "minor", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "long body to trigger omission over the profile max chars threshold"}}}}},
+				Sections: []releases.BundleSection{{Key: "added", Title: "Added", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f2", Type: "added", Bump: "minor", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "long body to trigger omission over the profile max chars threshold"}}}}},
 			},
 		},
 	}
@@ -140,7 +140,7 @@ func TestRenderChainDropsWholeReleaseBlocks(t *testing.T) {
 	if !strings.Contains(output, "## 0.2.0 (stable)") {
 		t.Fatalf("output missing first release block: %s", output)
 	}
-	if strings.Contains(output, "Drop me because") {
+	if strings.Contains(output, "long body to trigger omission") {
 		t.Fatalf("output should omit the second release block entirely: %s", output)
 	}
 	if !strings.Contains(output, "Additional releases omitted for length.") {

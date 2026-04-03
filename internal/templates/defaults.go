@@ -89,11 +89,11 @@ const DefaultRPMChangelogTemplate = `* {{ formatDateRPM .Release.CreatedAt }} {{
 {{- end }}
 `
 
-const DefaultReleaseEntryTemplate = `- {{ .Title }}{{ if .Breaking }} (breaking){{ end }}{{ if .Scopes }}{{ printf "\n%s" (indent (printf "Scope: %s" (join .Scopes ", ")) 2) }}{{ end }}{{ if .Body }}{{ printf "\n%s" (indent .Body 2) }}{{ end }}`
+const DefaultReleaseEntryTemplate = `{{ .Body }}`
 
-const DefaultTesterSummaryEntryTemplate = `- {{ .Title }}`
+const DefaultTesterSummaryEntryTemplate = `- {{ singleLine .Body }}`
 
-const DefaultPackageEntryTemplate = `- {{ .Title }}{{ if .Breaking }} (breaking){{ end }}{{ if .Body }}: {{ singleLine .Body }}{{ end }}`
+const DefaultPackageEntryTemplate = `- {{ singleLine .Body }}{{ if .Breaking }} (breaking){{ end }}`
 
 type BuiltInPack struct {
 	Name        string

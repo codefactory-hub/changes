@@ -116,16 +116,12 @@ func TestWriteDraftBatchWritesFragmentShapedDraftsToState(t *testing.T) {
 		}
 	}
 
-	raw, err := os.ReadFile(batch.Drafts[0].Path)
+	parsed, err := fragments.Load(batch.Drafts[0].Path)
 	if err != nil {
-		t.Fatalf("read draft file: %v", err)
+		t.Fatalf("Load returned error: %v", err)
 	}
-	parsed, err := fragments.Parse(raw)
-	if err != nil {
-		t.Fatalf("Parse returned error: %v", err)
-	}
-	if parsed.Title != "Slack for Mac 4.48.100" {
-		t.Fatalf("title = %q", parsed.Title)
+	if !strings.HasPrefix(parsed.Body, "Slack for Mac 4.48.100\n\n") {
+		t.Fatalf("draft body should begin with the explicit section title:\n%s", parsed.Body)
 	}
 	if !strings.Contains(parsed.Body, "- Fixed login issue.") {
 		t.Fatalf("draft body missing extracted section:\n%s", parsed.Body)
@@ -184,7 +180,7 @@ Intro paragraph.
 		t.Fatalf("draft count = %d, want 2", len(batch.Drafts))
 	}
 
-	titles := []string{batch.Drafts[0].Title, batch.Drafts[1].Title}
+	titles := []string{batch.Drafts[0].BodyPreview(), batch.Drafts[1].BodyPreview()}
 	if !slices.Equal(titles, []string{"Agent controls", "Terminal"}) {
 		t.Fatalf("titles = %#v", titles)
 	}

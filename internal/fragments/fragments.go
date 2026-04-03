@@ -10,14 +10,26 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/BurntSushi/toml"
 	"github.com/example/changes/internal/config"
 	"github.com/example/changes/internal/versioning"
 )
 
-const suffixAlphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+var (
+	idAdjectives = []string{
+		"amber", "brave", "calm", "daring", "eager", "fancy", "gentle", "hidden",
+		"icy", "jolly", "keen", "lucky", "mellow", "navy", "olive", "proud",
+	}
+	idNouns = []string{
+		"acorn", "beacon", "comet", "delta", "ember", "forest", "garden", "harbor",
+		"island", "jungle", "king", "lantern", "meadow", "nectar", "ocean", "prairie",
+	}
+	idVerbs = []string{
+		"adapts", "builds", "carries", "drifts", "echoes", "flows", "guides", "hovers",
+		"improves", "jumps", "keeps", "lifts", "moves", "nudges", "opens", "protects",
+	}
+)
 
 type Metadata struct {
 	ID                   string    `toml:"id"`
@@ -46,7 +58,6 @@ type Fragment struct {
 }
 
 type NewInput struct {
-	Title                string
 	Type                 string
 	Bump                 versioning.Bump
 	Breaking             bool
@@ -69,16 +80,9 @@ func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader,
 		random = rand.Reader
 	}
 
-	id, err := GenerateID(now, input.Title, random)
-	if err != nil {
-		return Fragment{}, err
-	}
-
 	item := Fragment{
 		Metadata: Metadata{
-			ID:                   id,
 			CreatedAt:            now.UTC().Truncate(time.Second),
-			Title:                strings.TrimSpace(input.Title),
 			Type:                 normalizeType(input.Type),
 			Bump:                 string(input.Bump),
 			Breaking:             input.Breaking,
@@ -95,19 +99,39 @@ func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader,
 			DisplayOrder:         input.DisplayOrder,
 		},
 		Body: strings.TrimSpace(input.Body),
-		Path: filepath.Join(config.FragmentsDir(repoRoot, cfg), id+".md"),
 	}
 
 	if err := item.Validate(); err != nil {
 		return Fragment{}, err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(item.Path), 0o755); err != nil {
+	dir := config.FragmentsDir(repoRoot, cfg)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return Fragment{}, fmt.Errorf("create fragments directory: %w", err)
+	}
+
+	for attempts := 0; attempts < 8; attempts++ {
+		id, err := GenerateID(random)
+		if err != nil {
+			return Fragment{}, err
+		}
+		item.ID = id
+		item.Path = filepath.Join(dir, id+".md")
+		if _, err := os.Stat(item.Path); os.IsNotExist(err) {
+			break
+		} else if err != nil {
+			return Fragment{}, fmt.Errorf("stat fragment path: %w", err)
+		}
+	}
+	if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.Path) == "" {
+		return Fragment{}, fmt.Errorf("generate fragment id: unable to allocate unique path")
 	}
 
 	if err := os.WriteFile(item.Path, []byte(item.Format()), 0o644); err != nil {
 		return Fragment{}, fmt.Errorf("write fragment: %w", err)
+	}
+	if err := os.Chtimes(item.Path, item.CreatedAt, item.CreatedAt); err != nil {
+		return Fragment{}, fmt.Errorf("set fragment timestamp: %w", err)
 	}
 
 	return item, nil
@@ -159,6 +183,21 @@ func Load(path string) (Fragment, error) {
 		return Fragment{}, fmt.Errorf("parse fragment %s: %w", path, err)
 	}
 	item.Path = path
+	if strings.TrimSpace(item.ID) == "" {
+		item.ID = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	}
+	if item.CreatedAt.IsZero() {
+		info, err := os.Stat(path)
+		if err != nil {
+			return Fragment{}, fmt.Errorf("stat fragment %s: %w", path, err)
+		}
+		item.CreatedAt = info.ModTime().UTC().Truncate(time.Second)
+	}
+	item.Type = normalizeType(item.Type)
+	item.Body = strings.TrimSpace(item.Body)
+	if err := item.Validate(); err != nil {
+		return Fragment{}, fmt.Errorf("validate fragment %s: %w", path, err)
+	}
 
 	return item, nil
 }
@@ -187,24 +226,12 @@ func Parse(raw []byte) (Fragment, error) {
 		Metadata: meta,
 		Body:     strings.TrimSpace(body),
 	}
-	if err := item.Validate(); err != nil {
-		return Fragment{}, err
-	}
 	return item, nil
 }
 
 func (f Fragment) Validate() error {
-	if strings.TrimSpace(f.ID) == "" {
-		return fmt.Errorf("fragment id is required")
-	}
-	if strings.TrimSpace(f.Title) == "" {
-		return fmt.Errorf("fragment title is required")
-	}
 	if strings.TrimSpace(f.Body) == "" {
 		return fmt.Errorf("fragment body is required")
-	}
-	if f.CreatedAt.IsZero() {
-		return fmt.Errorf("fragment created_at is required")
 	}
 	if f.ReleaseNotesPriority < 0 {
 		return fmt.Errorf("fragment release_notes_priority must be >= 0")
@@ -221,27 +248,61 @@ func (f Fragment) Validate() error {
 func (f Fragment) Format() string {
 	var buf bytes.Buffer
 	buf.WriteString("+++\n")
-	_ = toml.NewEncoder(&buf).Encode(f.Metadata)
+
+	var metadata struct {
+		Type                 string   `toml:"type"`
+		Bump                 string   `toml:"bump"`
+		Breaking             bool     `toml:"breaking,omitempty"`
+		Scopes               []string `toml:"scopes,omitempty"`
+		Authors              []string `toml:"authors,omitempty"`
+		SectionKey           string   `toml:"section_key,omitempty"`
+		Area                 string   `toml:"area,omitempty"`
+		Platforms            []string `toml:"platforms,omitempty"`
+		Audiences            []string `toml:"audiences,omitempty"`
+		CustomerVisible      bool     `toml:"customer_visible,omitempty"`
+		SupportRelevance     bool     `toml:"support_relevance,omitempty"`
+		RequiresAction       bool     `toml:"requires_action,omitempty"`
+		ReleaseNotesPriority int      `toml:"release_notes_priority,omitempty"`
+		DisplayOrder         int      `toml:"display_order,omitempty"`
+	}
+	metadata.Type = normalizeType(f.Type)
+	metadata.Bump = strings.TrimSpace(f.Bump)
+	metadata.Breaking = f.Breaking
+	metadata.Scopes = slices.Clone(f.Scopes)
+	metadata.Authors = slices.Clone(f.Authors)
+	metadata.SectionKey = strings.TrimSpace(f.SectionKey)
+	metadata.Area = strings.TrimSpace(f.Area)
+	metadata.Platforms = slices.Clone(f.Platforms)
+	metadata.Audiences = slices.Clone(f.Audiences)
+	metadata.CustomerVisible = f.CustomerVisible
+	metadata.SupportRelevance = f.SupportRelevance
+	metadata.RequiresAction = f.RequiresAction
+	metadata.ReleaseNotesPriority = f.ReleaseNotesPriority
+	metadata.DisplayOrder = f.DisplayOrder
+
+	_ = toml.NewEncoder(&buf).Encode(metadata)
 	buf.WriteString("+++\n\n")
 	buf.WriteString(strings.TrimSpace(f.Body))
 	buf.WriteString("\n")
 	return buf.String()
 }
 
-func GenerateID(now time.Time, title string, random io.Reader) (string, error) {
+func GenerateID(random io.Reader) (string, error) {
 	if random == nil {
 		random = rand.Reader
 	}
 
-	suffix, err := randomSuffix(random, 4)
-	if err != nil {
-		return "", fmt.Errorf("generate suffix: %w", err)
+	bytes := make([]byte, 3)
+	if _, err := io.ReadFull(random, bytes); err != nil {
+		return "", fmt.Errorf("generate id: %w", err)
 	}
 
-	timestamp := now.UTC().Truncate(time.Second).Format("20060102T150405Z")
-	slug := slugify(title)
-
-	return fmt.Sprintf("%s--%s--%s", timestamp, slug, suffix), nil
+	return fmt.Sprintf(
+		"%s-%s-%s",
+		idAdjectives[int(bytes[0])%len(idAdjectives)],
+		idNouns[int(bytes[1])%len(idNouns)],
+		idVerbs[int(bytes[2])%len(idVerbs)],
+	), nil
 }
 
 func normalizeType(raw string) string {
@@ -252,38 +313,16 @@ func normalizeType(raw string) string {
 	return value
 }
 
-func slugify(raw string) string {
-	var out []rune
-	lastDash := false
-	for _, r := range strings.ToLower(raw) {
-		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			out = append(out, r)
-			lastDash = false
-		case !lastDash:
-			out = append(out, '-')
-			lastDash = true
-		}
+func (f Fragment) BodyPreview() string {
+	body := strings.TrimSpace(f.Body)
+	if body == "" {
+		return ""
 	}
 
-	slug := strings.Trim(string(out), "-")
-	if slug == "" {
-		return "change"
+	lines := strings.Split(body, "\n")
+	preview := strings.TrimSpace(lines[0])
+	if preview == "" {
+		return ""
 	}
-	return slug
-}
-
-func randomSuffix(r io.Reader, length int) (string, error) {
-	bytes := make([]byte, length)
-	if _, err := io.ReadFull(r, bytes); err != nil {
-		return "", err
-	}
-
-	var builder strings.Builder
-	builder.Grow(length)
-	for _, b := range bytes {
-		builder.WriteByte(suffixAlphabet[int(b)%len(suffixAlphabet)])
-	}
-
-	return builder.String(), nil
+	return strings.Join(strings.Fields(preview), " ")
 }

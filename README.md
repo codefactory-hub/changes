@@ -4,6 +4,17 @@
 
 `changes` is fragment-centric. External changelog formats are views generated from fragments plus release records; they are not the source of truth.
 
+Default fragment shape:
+
+```md
++++
+bump = "minor"
+type = "added"
++++
+
+Any Markdown content goes here.
+```
+
 ## Repository-local layout
 
 Committed:
@@ -23,7 +34,7 @@ The tool always resolves the target repository root from Git. If a command runs 
 
 ```text
 changes init
-changes add --title ... --type fixed --bump patch --body ...
+changes add --type fixed --bump patch --body ...
 changes status
 changes version next [--pre rc]
 changes release [--pre rc] [--version ...]

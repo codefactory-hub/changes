@@ -51,18 +51,17 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Random = bytes.NewReader([]byte{0, 1, 2, 3})
 	if err := app.Run(context.Background(), []string{
 		"add",
-		"--title", "Fix release note rendering",
 		"--type", "fixed",
 		"--bump", "patch",
 		"--scope", "release",
-		"--body", "Render whole entries only.",
+		"--body", "Fix release note rendering.\n\nRender whole entries only.",
 	}); err != nil {
 		t.Fatalf("add returned error: %v\nstderr=%s", err, stderr.String())
 	}
 
 	fragmentPath := strings.TrimSpace(stdout.String())
 	assertExists(t, fragmentPath)
-	if !regexp.MustCompile(`20260402T153045Z--fix-release-note-rendering--[a-z0-9]{4}\.md$`).MatchString(fragmentPath) {
+	if !regexp.MustCompile(`[a-z]+-[a-z]+-[a-z]+\.md$`).MatchString(fragmentPath) {
 		t.Fatalf("fragment path %q did not match expected pattern", fragmentPath)
 	}
 
@@ -128,10 +127,9 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Random = bytes.NewReader([]byte{8, 9, 10, 11})
 	if err := app.Run(context.Background(), []string{
 		"add",
-		"--title", "Add tester profile",
 		"--type", "added",
 		"--bump", "minor",
-		"--body", "Introduce concise tester rendering.",
+		"--body", "Add tester profile.\n\nIntroduce concise tester rendering.",
 	}); err != nil {
 		t.Fatalf("second add returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -159,10 +157,10 @@ func TestAppEndToEnd(t *testing.T) {
 	if !strings.Contains(stdout.String(), "# Release 0.1.0-rc.2") {
 		t.Fatalf("github render missing expected heading:\n%s", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Add tester profile") {
+	if !strings.Contains(stdout.String(), "Add tester profile.") {
 		t.Fatalf("github render should include only the second release delta:\n%s", stdout.String())
 	}
-	if strings.Contains(stdout.String(), "Fix release note rendering") {
+	if strings.Contains(stdout.String(), "Fix release note rendering.") {
 		t.Fatalf("github render should not include the parent delta:\n%s", stdout.String())
 	}
 
@@ -189,7 +187,7 @@ func TestAppEndToEnd(t *testing.T) {
 	if err := app.Run(context.Background(), []string{"render", "--version", "0.1.0-beta.1", "--profile", config.RenderProfileGitHubRelease}); err != nil {
 		t.Fatalf("render beta github returned error: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "Fix release note rendering") || !strings.Contains(stdout.String(), "Add tester profile") {
+	if !strings.Contains(stdout.String(), "Fix release note rendering.") || !strings.Contains(stdout.String(), "Add tester profile.") {
 		t.Fatalf("beta render should include both final-unreleased fragments:\n%s", stdout.String())
 	}
 
@@ -269,13 +267,12 @@ func TestAppResolveEmitsReleaseBundleJSON(t *testing.T) {
 	}
 	if err := app.Run(context.Background(), []string{
 		"add",
-		"--title", "Introduce highlights section",
 		"--type", "added",
 		"--bump", "minor",
 		"--section-key", "highlights",
 		"--customer-visible",
 		"--release-notes-priority", "2",
-		"--body", "Expose a faster path.",
+		"--body", "Introduce highlights section.\n\nExpose a faster path.",
 	}); err != nil {
 		t.Fatalf("add returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -315,6 +312,52 @@ func TestAppResolveEmitsReleaseBundleJSON(t *testing.T) {
 	}
 	if !strings.Contains(body, "\"must_include_fragment_ids\": [") {
 		t.Fatalf("resolve output missing must_include_fragment_ids:\n%s", body)
+	}
+}
+
+func TestAppHelpSurface(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+
+	if err := app.Run(context.Background(), []string{"--help"}); err != nil {
+		t.Fatalf("root --help returned error: %v", err)
+	}
+	rootHelp := stdout.String()
+	if !strings.Contains(rootHelp, "Usage:") || !strings.Contains(rootHelp, "changes <command> [options]") {
+		t.Fatalf("root help missing usage:\n%s", rootHelp)
+	}
+	if !strings.Contains(rootHelp, "render profiles") || !strings.Contains(rootHelp, "changelog rebuild") {
+		t.Fatalf("root help missing commands:\n%s", rootHelp)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("root --help should not write stderr:\n%s", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"help", "render"}); err != nil {
+		t.Fatalf("help render returned error: %v", err)
+	}
+	renderHelp := stdout.String()
+	if !strings.Contains(renderHelp, "changes render --version <version>") {
+		t.Fatalf("render help missing version usage:\n%s", renderHelp)
+	}
+	if !strings.Contains(renderHelp, "changes render --record <path>") {
+		t.Fatalf("render help missing record usage:\n%s", renderHelp)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"render", "--help"}); err != nil {
+		t.Fatalf("render --help returned error: %v", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "Render one release or a release lineage") {
+		t.Fatalf("render --help missing description:\n%s", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("render --help should not write stderr:\n%s", stderr.String())
 	}
 }
 
