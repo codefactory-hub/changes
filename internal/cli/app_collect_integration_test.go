@@ -88,3 +88,153 @@ format = "html"
 	assertExists(t, filepath.Join(snapshotDir, "node-js.html"))
 	assertExists(t, filepath.Join(snapshotDir, "node-js.txt"))
 }
+
+func TestAppCollectDraftsWritesImportedFragmentsToState(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 3, 3, 0, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{0, 1, 2, 3, 4, 5, 6, 7})
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	normalizedPath := filepath.Join(repoRoot, ".local/state/changes/go.txt")
+	if err := os.WriteFile(normalizedPath, []byte("## 1.25.0\n\n- Added profile-guided optimization support.\n\n## 1.24.3\n\n- Fixed runtime regressions.\n"), 0o644); err != nil {
+		t.Fatalf("write normalized file: %v", err)
+	}
+
+	inputPath := filepath.Join(repoRoot, ".local/state/changes/collection.json")
+	if err := os.WriteFile(inputPath, []byte(`{
+  "catalog_path": "/tmp/catalog.toml",
+  "collected_at": "2026-04-03T02:30:00Z",
+  "results": [
+    {
+      "source": {
+        "ID": "go",
+        "Name": "Go",
+        "Product": "Go",
+        "URL": "https://go.dev/doc/devel/release",
+        "Format": "html"
+      },
+      "fetched_at": "2026-04-03T02:30:00Z",
+      "status_code": 200,
+      "detected_format": "html",
+      "title": "Go Release History",
+      "headings": ["Go 1.25"],
+      "excerpt": "Go 1.25 includes runtime and toolchain updates.",
+      "raw_path": "/tmp/go.html",
+      "normalized_path": "`+normalizedPath+`"
+    }
+  ]
+}`), 0o644); err != nil {
+		t.Fatalf("write input json: %v", err)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"collect", "drafts", "--input", ".local/state/changes/collection.json"}); err != nil {
+		t.Fatalf("collect drafts returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	outputDir := strings.TrimSpace(stdout.String())
+	wantDir := filepath.Join(repoRoot, ".local/state/collect-changes")
+	if outputDir != wantDir {
+		t.Fatalf("stdout output dir = %q, want %q", outputDir, wantDir)
+	}
+
+	fragmentsDir := filepath.Join(outputDir, "go", "changes", "fragments")
+	entries, err := os.ReadDir(fragmentsDir)
+	if err != nil {
+		t.Fatalf("read fragments dir: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("draft count = %d, want 2", len(entries))
+	}
+
+	for _, dir := range []string{
+		filepath.Join(outputDir, "go", "changes", "fragments"),
+		filepath.Join(outputDir, "go", "changes", "releases"),
+		filepath.Join(outputDir, "go", "changes", "templates"),
+	} {
+		assertExists(t, dir)
+	}
+
+	draftPath := filepath.Join(fragmentsDir, entries[0].Name())
+	raw, err := os.ReadFile(draftPath)
+	if err != nil {
+		t.Fatalf("read draft: %v", err)
+	}
+	if !strings.Contains(string(raw), "Added profile-guided optimization support.") && !strings.Contains(string(raw), "Fixed runtime regressions.") {
+		t.Fatalf("draft missing extracted section text:\n%s", raw)
+	}
+}
+
+func TestAppCollectReconstructWritesReport(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 3, 4, 5, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{0, 1, 2, 3, 4, 5, 6, 7})
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	normalizedPath := filepath.Join(repoRoot, ".local/state/changes/go.txt")
+	if err := os.WriteFile(normalizedPath, []byte("## 1.25.0\n\n- Added profile-guided optimization support.\n\n## 1.24.3\n\n- Fixed runtime regressions.\n"), 0o644); err != nil {
+		t.Fatalf("write normalized file: %v", err)
+	}
+
+	inputPath := filepath.Join(repoRoot, ".local/state/changes/collection.json")
+	if err := os.WriteFile(inputPath, []byte(`{
+  "catalog_path": "/tmp/catalog.toml",
+  "collected_at": "2026-04-03T02:30:00Z",
+  "results": [
+    {
+      "source": {
+        "ID": "go",
+        "Name": "Go",
+        "Product": "Go",
+        "URL": "https://go.dev/doc/devel/release",
+        "Format": "html"
+      },
+      "normalized_path": "`+normalizedPath+`"
+    }
+  ]
+}`), 0o644); err != nil {
+		t.Fatalf("write input json: %v", err)
+	}
+
+	if err := app.Run(context.Background(), []string{"collect", "drafts", "--input", ".local/state/changes/collection.json"}); err != nil {
+		t.Fatalf("collect drafts returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"collect", "reconstruct", "--input", ".local/state/changes/collection.json"}); err != nil {
+		t.Fatalf("collect reconstruct returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	reportPath := strings.TrimSpace(stdout.String())
+	wantReportPath := filepath.Join(repoRoot, ".local/state/collect-changes", "reconstruction-report.json")
+	if reportPath != wantReportPath {
+		t.Fatalf("stdout report path = %q, want %q", reportPath, wantReportPath)
+	}
+	assertExists(t, reportPath)
+	assertExists(t, filepath.Join(repoRoot, ".local/state/collect-changes", "go", "changes", "rendered", "go", "repository_markdown.md"))
+	assertExists(t, filepath.Join(repoRoot, ".local/state/collect-changes", "go", "changes", "releases", "go-0.0.1.toml"))
+}

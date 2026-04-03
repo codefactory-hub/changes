@@ -20,14 +20,23 @@ import (
 const suffixAlphabet = "abcdefghjkmnpqrstuvwxyz23456789"
 
 type Metadata struct {
-	ID        string    `toml:"id"`
-	CreatedAt time.Time `toml:"created_at"`
-	Title     string    `toml:"title"`
-	Type      string    `toml:"type"`
-	Bump      string    `toml:"bump"`
-	Breaking  bool      `toml:"breaking"`
-	Scopes    []string  `toml:"scopes"`
-	Authors   []string  `toml:"authors"`
+	ID                   string    `toml:"id"`
+	CreatedAt            time.Time `toml:"created_at"`
+	Title                string    `toml:"title"`
+	Type                 string    `toml:"type"`
+	Bump                 string    `toml:"bump"`
+	Breaking             bool      `toml:"breaking"`
+	Scopes               []string  `toml:"scopes"`
+	Authors              []string  `toml:"authors"`
+	SectionKey           string    `toml:"section_key"`
+	Area                 string    `toml:"area"`
+	Platforms            []string  `toml:"platforms"`
+	Audiences            []string  `toml:"audiences"`
+	CustomerVisible      bool      `toml:"customer_visible"`
+	SupportRelevance     bool      `toml:"support_relevance"`
+	RequiresAction       bool      `toml:"requires_action"`
+	ReleaseNotesPriority int       `toml:"release_notes_priority"`
+	DisplayOrder         int       `toml:"display_order"`
 }
 
 type Fragment struct {
@@ -37,13 +46,22 @@ type Fragment struct {
 }
 
 type NewInput struct {
-	Title    string
-	Type     string
-	Bump     versioning.Bump
-	Breaking bool
-	Scopes   []string
-	Authors  []string
-	Body     string
+	Title                string
+	Type                 string
+	Bump                 versioning.Bump
+	Breaking             bool
+	Scopes               []string
+	Authors              []string
+	SectionKey           string
+	Area                 string
+	Platforms            []string
+	Audiences            []string
+	CustomerVisible      bool
+	SupportRelevance     bool
+	RequiresAction       bool
+	ReleaseNotesPriority int
+	DisplayOrder         int
+	Body                 string
 }
 
 func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader, input NewInput) (Fragment, error) {
@@ -58,14 +76,23 @@ func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader,
 
 	item := Fragment{
 		Metadata: Metadata{
-			ID:        id,
-			CreatedAt: now.UTC().Truncate(time.Second),
-			Title:     strings.TrimSpace(input.Title),
-			Type:      normalizeType(input.Type),
-			Bump:      string(input.Bump),
-			Breaking:  input.Breaking,
-			Scopes:    slices.Clone(input.Scopes),
-			Authors:   slices.Clone(input.Authors),
+			ID:                   id,
+			CreatedAt:            now.UTC().Truncate(time.Second),
+			Title:                strings.TrimSpace(input.Title),
+			Type:                 normalizeType(input.Type),
+			Bump:                 string(input.Bump),
+			Breaking:             input.Breaking,
+			Scopes:               slices.Clone(input.Scopes),
+			Authors:              slices.Clone(input.Authors),
+			SectionKey:           strings.TrimSpace(input.SectionKey),
+			Area:                 strings.TrimSpace(input.Area),
+			Platforms:            slices.Clone(input.Platforms),
+			Audiences:            slices.Clone(input.Audiences),
+			CustomerVisible:      input.CustomerVisible,
+			SupportRelevance:     input.SupportRelevance,
+			RequiresAction:       input.RequiresAction,
+			ReleaseNotesPriority: input.ReleaseNotesPriority,
+			DisplayOrder:         input.DisplayOrder,
 		},
 		Body: strings.TrimSpace(input.Body),
 		Path: filepath.Join(config.FragmentsDir(repoRoot, cfg), id+".md"),
@@ -178,6 +205,12 @@ func (f Fragment) Validate() error {
 	}
 	if f.CreatedAt.IsZero() {
 		return fmt.Errorf("fragment created_at is required")
+	}
+	if f.ReleaseNotesPriority < 0 {
+		return fmt.Errorf("fragment release_notes_priority must be >= 0")
+	}
+	if f.DisplayOrder < 0 {
+		return fmt.Errorf("fragment display_order must be >= 0")
 	}
 	if _, err := versioning.NormalizeBump(f.Bump); err != nil {
 		return err

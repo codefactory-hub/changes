@@ -23,12 +23,21 @@ func TestGenerateID(t *testing.T) {
 func TestFormatParseRoundTrip(t *testing.T) {
 	item := Fragment{
 		Metadata: Metadata{
-			ID:        "20260402T153045Z--fix-release-note-rendering--abcd",
-			CreatedAt: time.Date(2026, 4, 2, 15, 30, 45, 0, time.UTC),
-			Title:     "Fix release note rendering",
-			Type:      "fixed",
-			Bump:      "patch",
-			Scopes:    []string{"release"},
+			ID:                   "20260402T153045Z--fix-release-note-rendering--abcd",
+			CreatedAt:            time.Date(2026, 4, 2, 15, 30, 45, 0, time.UTC),
+			Title:                "Fix release note rendering",
+			Type:                 "fixed",
+			Bump:                 "patch",
+			Scopes:               []string{"release"},
+			SectionKey:           "fixes",
+			Area:                 "rendering",
+			Platforms:            []string{"cli"},
+			Audiences:            []string{"engineers"},
+			CustomerVisible:      true,
+			SupportRelevance:     true,
+			RequiresAction:       true,
+			ReleaseNotesPriority: 2,
+			DisplayOrder:         1,
 		},
 		Body: "Render whole entries only.",
 	}
@@ -41,6 +50,9 @@ func TestFormatParseRoundTrip(t *testing.T) {
 
 	if parsed.ID != item.ID || parsed.Title != item.Title || parsed.Body != item.Body {
 		t.Fatalf("Parse(Format()) mismatch: got %#v want %#v", parsed, item)
+	}
+	if parsed.SectionKey != item.SectionKey || parsed.Area != item.Area || parsed.DisplayOrder != item.DisplayOrder {
+		t.Fatalf("Parse(Format()) metadata mismatch: got %#v want %#v", parsed.Metadata, item.Metadata)
 	}
 	if !strings.Contains(raw, "title = \"Fix release note rendering\"") {
 		t.Fatalf("formatted fragment missing title: %s", raw)

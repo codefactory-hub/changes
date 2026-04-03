@@ -23,25 +23,23 @@ func TestRebuildDeterministic(t *testing.T) {
 		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC), Title: "Bootstrap fragments", Type: "added", Bump: "minor"}, Body: "Added fragment storage."},
 		{Metadata: fragments.Metadata{ID: "f2", CreatedAt: time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC), Title: "Fix render limits", Type: "fixed", Bump: "patch"}, Body: "Drops whole entries only."},
 	}
-	manifests := []releases.Manifest{
+	records := []releases.ReleaseRecord{
 		{
+			Product:          "changes",
 			Version:          "0.2.0",
-			TargetVersion:    "0.2.0",
-			Channel:          releases.ChannelStable,
 			ParentVersion:    "0.1.0",
 			CreatedAt:        time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
 			AddedFragmentIDs: []string{"f2"},
 		},
 		{
+			Product:          "changes",
 			Version:          "0.1.0",
-			TargetVersion:    "0.1.0",
-			Channel:          releases.ChannelStable,
 			CreatedAt:        time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
 			AddedFragmentIDs: []string{"f1"},
 		},
 	}
 
-	got, err := Rebuild(repoRoot, cfg, frags, manifests)
+	got, err := Rebuild(repoRoot, cfg, frags, records)
 	if err != nil {
 		t.Fatalf("Rebuild returned error: %v", err)
 	}

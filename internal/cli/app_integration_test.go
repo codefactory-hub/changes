@@ -101,19 +101,24 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 
 	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"release", "create", "--pre", "rc"}); err == nil {
+		t.Fatalf("release create should be rejected after the CLI refactor")
+	}
+
+	stdout.Reset()
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 16, 0, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "create", "--channel", "preview", "--pre", "rc"}); err != nil {
-		t.Fatalf("release create preview returned error: %v", err)
+	if err := app.Run(context.Background(), []string{"release", "--pre", "rc"}); err != nil {
+		t.Fatalf("release --pre rc returned error: %v", err)
 	}
-	previewPath := strings.TrimSpace(stdout.String())
-	previewManifest, err := releases.Load(previewPath)
+	rc1Path := strings.TrimSpace(stdout.String())
+	rc1Manifest, err := releases.Load(rc1Path)
 	if err != nil {
-		t.Fatalf("load preview manifest: %v", err)
+		t.Fatalf("load rc1 manifest: %v", err)
 	}
-	if previewManifest.ParentVersion != "" {
-		t.Fatalf("first preview should not have a parent, got %q", previewManifest.ParentVersion)
+	if rc1Manifest.ParentVersion != "" {
+		t.Fatalf("first prerelease should not have a parent, got %q", rc1Manifest.ParentVersion)
 	}
 
 	stdout.Reset()
@@ -135,16 +140,16 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 17, 0, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "create", "--channel", "preview", "--pre", "rc"}); err != nil {
-		t.Fatalf("release create preview 2 returned error: %v", err)
+	if err := app.Run(context.Background(), []string{"release", "--pre", "rc"}); err != nil {
+		t.Fatalf("second release --pre rc returned error: %v", err)
 	}
-	preview2Path := strings.TrimSpace(stdout.String())
-	preview2Manifest, err := releases.Load(preview2Path)
+	rc2Path := strings.TrimSpace(stdout.String())
+	rc2Manifest, err := releases.Load(rc2Path)
 	if err != nil {
-		t.Fatalf("load preview2 manifest: %v", err)
+		t.Fatalf("load rc2 manifest: %v", err)
 	}
-	if preview2Manifest.ParentVersion != previewManifest.Version {
-		t.Fatalf("preview 2 parent = %q, want %q", preview2Manifest.ParentVersion, previewManifest.Version)
+	if rc2Manifest.ParentVersion != rc1Manifest.Version {
+		t.Fatalf("rc2 parent = %q, want %q", rc2Manifest.ParentVersion, rc1Manifest.Version)
 	}
 
 	stdout.Reset()
@@ -163,10 +168,45 @@ func TestAppEndToEnd(t *testing.T) {
 
 	stdout.Reset()
 	app.Now = func() time.Time {
+		return time.Date(2026, 4, 2, 17, 30, 0, 0, time.UTC)
+	}
+	if err := app.Run(context.Background(), []string{"release", "--pre", "beta"}); err != nil {
+		t.Fatalf("release --pre beta returned error: %v", err)
+	}
+	beta1Path := strings.TrimSpace(stdout.String())
+	beta1Manifest, err := releases.Load(beta1Path)
+	if err != nil {
+		t.Fatalf("load beta1 manifest: %v", err)
+	}
+	if beta1Manifest.ParentVersion != "" {
+		t.Fatalf("beta1 should not inherit the rc lineage, got parent %q", beta1Manifest.ParentVersion)
+	}
+	if got := beta1Manifest.AddedFragmentIDs; len(got) != 2 {
+		t.Fatalf("beta1 added_fragment_ids = %#v, want both fragments", got)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"render", "--version", "0.1.0-beta.1", "--profile", config.RenderProfileGitHubRelease}); err != nil {
+		t.Fatalf("render beta github returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Fix release note rendering") || !strings.Contains(stdout.String(), "Add tester profile") {
+		t.Fatalf("beta render should include both final-unreleased fragments:\n%s", stdout.String())
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"status"}); err != nil {
+		t.Fatalf("status after prereleases returned error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Active prerelease heads:") || !strings.Contains(stdout.String(), "0.1.0-rc.2 -> 0.1.0") || !strings.Contains(stdout.String(), "0.1.0-beta.1 -> 0.1.0") {
+		t.Fatalf("unexpected prerelease status output:\n%s", stdout.String())
+	}
+
+	stdout.Reset()
+	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 18, 0, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "create", "--channel", "stable"}); err != nil {
-		t.Fatalf("release create stable returned error: %v", err)
+	if err := app.Run(context.Background(), []string{"release"}); err != nil {
+		t.Fatalf("release returned error: %v", err)
 	}
 	stablePath := strings.TrimSpace(stdout.String())
 	stableManifest, err := releases.Load(stablePath)
@@ -207,6 +247,74 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "Unreleased fragments: 0") {
 		t.Fatalf("unexpected post-release status:\n%s", stdout.String())
+	}
+}
+
+func TestAppResolveEmitsReleaseBundleJSON(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{0, 1, 2, 3, 4, 5, 6, 7})
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if err := app.Run(context.Background(), []string{
+		"add",
+		"--title", "Introduce highlights section",
+		"--type", "added",
+		"--bump", "minor",
+		"--section-key", "highlights",
+		"--customer-visible",
+		"--release-notes-priority", "2",
+		"--body", "Expose a faster path.",
+	}); err != nil {
+		t.Fatalf("add returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"release"}); err != nil {
+		t.Fatalf("release returned error: %v", err)
+	}
+
+	cfg, err := config.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	product := cfg.Project.Name
+	companion := releases.ReleaseRecord{
+		Product:          product,
+		Version:          "0.1.0+docs.1",
+		CreatedAt:        time.Date(2026, 4, 3, 12, 30, 0, 0, time.UTC),
+		CompanionPurpose: "docs",
+		SourceURL:        "https://example.invalid/docs",
+	}
+	if _, err := releases.Write(repoRoot, cfg, companion); err != nil {
+		t.Fatalf("write companion record: %v", err)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"resolve", "--version", "0.1.0"}); err != nil {
+		t.Fatalf("resolve returned error: %v", err)
+	}
+
+	body := stdout.String()
+	if !strings.Contains(body, "\"version\": \"0.1.0\"") {
+		t.Fatalf("resolve output missing base version:\n%s", body)
+	}
+	if !strings.Contains(body, "\"version\": \"0.1.0+docs.1\"") {
+		t.Fatalf("resolve output missing companion version:\n%s", body)
+	}
+	if !strings.Contains(body, "\"must_include_fragment_ids\": [") {
+		t.Fatalf("resolve output missing must_include_fragment_ids:\n%s", body)
 	}
 }
 

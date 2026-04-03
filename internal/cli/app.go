@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -63,6 +64,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		err = a.runRelease(ctx, args[1:])
 	case "render":
 		err = a.runRender(ctx, args[1:])
+	case "resolve":
+		err = a.runResolve(ctx, args[1:])
 	case "changelog":
 		err = a.runChangelog(ctx, args[1:])
 	default:
@@ -138,6 +141,15 @@ func (a *App) runAdd(ctx context.Context, args []string) error {
 	var body string
 	var breaking bool
 	var scopes stringSliceFlag
+	var sectionKey string
+	var area string
+	var platforms stringSliceFlag
+	var audiences stringSliceFlag
+	var customerVisible bool
+	var supportRelevance bool
+	var requiresAction bool
+	var releaseNotesPriority int
+	var displayOrder int
 
 	fs.StringVar(&title, "title", "", "Fragment title")
 	fs.StringVar(&kind, "type", "changed", "Fragment type")
@@ -145,6 +157,15 @@ func (a *App) runAdd(ctx context.Context, args []string) error {
 	fs.StringVar(&body, "body", "", "Fragment body")
 	fs.BoolVar(&breaking, "breaking", false, "Mark entry as breaking")
 	fs.Var(&scopes, "scope", "Fragment scope (repeatable)")
+	fs.StringVar(&sectionKey, "section-key", "", "Fragment section key")
+	fs.StringVar(&area, "area", "", "Fragment product area")
+	fs.Var(&platforms, "platform", "Fragment platform (repeatable)")
+	fs.Var(&audiences, "audience", "Fragment audience (repeatable)")
+	fs.BoolVar(&customerVisible, "customer-visible", false, "Mark entry as customer visible")
+	fs.BoolVar(&supportRelevance, "support-relevance", false, "Mark entry as support relevant")
+	fs.BoolVar(&requiresAction, "requires-action", false, "Mark entry as requiring operator action")
+	fs.IntVar(&releaseNotesPriority, "release-notes-priority", 0, "Release notes priority")
+	fs.IntVar(&displayOrder, "display-order", 0, "Display order within a section")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -168,12 +189,21 @@ func (a *App) runAdd(ctx context.Context, args []string) error {
 	}
 
 	item, err := fragments.Create(repoRoot, cfg, a.Now(), a.Random, fragments.NewInput{
-		Title:    title,
-		Type:     kind,
-		Bump:     normalizedBump,
-		Breaking: breaking,
-		Scopes:   scopes,
-		Body:     body,
+		Title:                title,
+		Type:                 kind,
+		Bump:                 normalizedBump,
+		Breaking:             breaking,
+		Scopes:               scopes,
+		SectionKey:           sectionKey,
+		Area:                 area,
+		Platforms:            platforms,
+		Audiences:            audiences,
+		CustomerVisible:      customerVisible,
+		SupportRelevance:     supportRelevance,
+		RequiresAction:       requiresAction,
+		ReleaseNotesPriority: releaseNotesPriority,
+		DisplayOrder:         displayOrder,
+		Body:                 body,
 	})
 	if err != nil {
 		return err
@@ -189,23 +219,27 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("usage: changes status")
+	}
 
 	repoRoot, cfg, err := a.loadConfig(ctx)
 	if err != nil {
 		return err
 	}
 
-	allFragments, manifests, err := a.loadState(repoRoot, cfg)
+	allFragments, records, err := a.loadState(repoRoot, cfg)
 	if err != nil {
 		return err
 	}
 
-	unreleased, err := releases.UnreleasedStableFragments(allFragments, manifests)
+	product := cfg.Project.Name
+	unreleased, err := releases.UnreleasedFinalFragments(allFragments, records, product)
 	if err != nil {
 		return err
 	}
 	highest := highestPendingBump(unreleased)
-	nextStable, err := recommendedStableVersion(cfg, manifests, unreleased)
+	nextStable, err := recommendedStableVersion(cfg, records, product, unreleased)
 	if err != nil {
 		return err
 	}
@@ -214,11 +248,11 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	_, _ = fmt.Fprintf(a.Stdout, "Highest pending bump: %s\n", highest)
 	_, _ = fmt.Fprintf(a.Stdout, "Recommended next stable: %s\n", nextStable.String())
 
-	previewHeads := releases.PreviewHeads(manifests)
-	if len(previewHeads) > 0 {
-		_, _ = fmt.Fprintln(a.Stdout, "Active preview heads:")
-		for _, head := range previewHeads {
-			_, _ = fmt.Fprintf(a.Stdout, "- %s -> %s\n", head.Version, head.TargetVersion)
+	prereleaseHeads := releases.PrereleaseHeads(records, product)
+	if len(prereleaseHeads) > 0 {
+		_, _ = fmt.Fprintln(a.Stdout, "Active prerelease heads:")
+		for _, head := range prereleaseHeads {
+			_, _ = fmt.Fprintf(a.Stdout, "- %s -> %s\n", head.Version, head.TargetVersion())
 		}
 	}
 
@@ -250,16 +284,17 @@ func (a *App) runVersion(ctx context.Context, args []string) error {
 		return err
 	}
 
-	allFragments, manifests, err := a.loadState(repoRoot, cfg)
+	allFragments, records, err := a.loadState(repoRoot, cfg)
 	if err != nil {
 		return err
 	}
 
-	unreleased, err := releases.UnreleasedStableFragments(allFragments, manifests)
+	product := cfg.Project.Name
+	unreleased, err := releases.UnreleasedFinalFragments(allFragments, records, product)
 	if err != nil {
 		return err
 	}
-	nextStable, err := recommendedStableVersion(cfg, manifests, unreleased)
+	nextStable, err := recommendedStableVersion(cfg, records, product, unreleased)
 	if err != nil {
 		return err
 	}
@@ -269,29 +304,26 @@ func (a *App) runVersion(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	nextPreview := recommendedPreviewVersion(cfg, manifests, nextStable, pre)
-	_, _ = fmt.Fprintln(a.Stdout, nextPreview.String())
+	nextPrerelease := recommendedPreviewVersion(cfg, records, product, nextStable, pre)
+	_, _ = fmt.Fprintln(a.Stdout, nextPrerelease.String())
 	return nil
 }
 
 func (a *App) runRelease(ctx context.Context, args []string) error {
-	if len(args) == 0 || args[0] != "create" {
-		return fmt.Errorf("usage: changes release create [--version v] [--pre label] [--channel preview|stable]")
-	}
-
-	fs := flag.NewFlagSet("release create", flag.ContinueOnError)
+	fs := flag.NewFlagSet("release", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	var version string
 	var pre string
-	var channel string
 
 	fs.StringVar(&version, "version", "", "Release version")
 	fs.StringVar(&pre, "pre", "", "Prerelease label")
-	fs.StringVar(&channel, "channel", releases.ChannelStable, "Release channel")
 
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("usage: changes release [--version v] [--pre label]")
 	}
 
 	repoRoot, cfg, err := a.loadConfig(ctx)
@@ -299,17 +331,18 @@ func (a *App) runRelease(ctx context.Context, args []string) error {
 		return err
 	}
 
-	allFragments, manifests, err := a.loadState(repoRoot, cfg)
+	allFragments, records, err := a.loadState(repoRoot, cfg)
 	if err != nil {
 		return err
 	}
 
-	releaseVersion, targetVersion, err := selectReleaseVersion(cfg, manifests, allFragments, version, pre, channel)
+	product := cfg.Project.Name
+	releaseVersion, err := selectReleaseVersion(cfg, records, product, allFragments, version, pre)
 	if err != nil {
 		return err
 	}
 
-	selected, err := selectReleaseFragments(allFragments, manifests, releaseVersion, channel)
+	selected, err := selectReleaseFragments(allFragments, records, product, releaseVersion)
 	if err != nil {
 		return err
 	}
@@ -319,21 +352,20 @@ func (a *App) runRelease(ctx context.Context, args []string) error {
 		ids = append(ids, item.ID)
 	}
 
-	parentVersion := selectParentVersion(manifests, releaseVersion, channel)
-	manifest := releases.Manifest{
+	parentVersion := selectParentVersion(records, product, releaseVersion)
+	record := releases.ReleaseRecord{
+		Product:          product,
 		Version:          releaseVersion.String(),
-		TargetVersion:    targetVersion.String(),
-		Channel:          channel,
 		ParentVersion:    parentVersion,
 		CreatedAt:        a.Now().UTC().Truncate(time.Second),
 		AddedFragmentIDs: ids,
 	}
 
-	if err := releases.ValidateSet(append(slices.Clone(manifests), manifest)); err != nil {
+	if err := releases.ValidateSet(append(slices.Clone(records), record)); err != nil {
 		return err
 	}
 
-	path, err := releases.Write(repoRoot, cfg, manifest)
+	path, err := releases.Write(repoRoot, cfg, record)
 	if err != nil {
 		return err
 	}
@@ -354,11 +386,13 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 	var manifestPath string
 	var profile string
 	var outputPath string
+	var product string
 
-	fs.StringVar(&version, "version", "", "Manifest version")
-	fs.StringVar(&manifestPath, "manifest", "", "Explicit manifest path")
+	fs.StringVar(&version, "version", "", "Release version")
+	fs.StringVar(&manifestPath, "manifest", "", "Explicit release record path")
 	fs.StringVar(&profile, "profile", config.RenderProfileGitHubRelease, "Render profile")
 	fs.StringVar(&outputPath, "output", "", "Output path")
+	fs.StringVar(&product, "product", "", "Product name")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -373,32 +407,30 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 		return err
 	}
 
-	_, manifests, err := a.loadState(repoRoot, cfg)
+	allFragments, records, err := a.loadState(repoRoot, cfg)
 	if err != nil {
 		return err
 	}
+	if strings.TrimSpace(product) == "" {
+		product = cfg.Project.Name
+	}
 
-	var manifest releases.Manifest
+	var record releases.ReleaseRecord
 	if strings.TrimSpace(manifestPath) != "" {
-		manifest, err = releases.Load(manifestPath)
+		record, err = releases.Load(manifestPath)
 	} else {
-		manifest, err = releases.Load(releases.ManifestPath(repoRoot, cfg, version))
-	}
-	if err != nil {
-		return err
-	}
-
-	allFragments, err := fragments.List(repoRoot, cfg)
-	if err != nil {
-		return err
+		base, findErr := releases.FindBaseRecord(records, product, version)
+		if findErr != nil {
+			return findErr
+		}
+		record = *base
 	}
 
 	renderer, err := render.New(repoRoot, cfg, profile)
 	if err != nil {
 		return err
 	}
-	selector := render.NewSelector(allFragments, manifests)
-	doc, err := selectRenderDocument(renderer.Pack(), selector, manifest)
+	doc, err := selectRenderDocument(renderer.Pack(), record, records, allFragments)
 	if err != nil {
 		return err
 	}
@@ -415,6 +447,72 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 	}
 
 	_, _ = fmt.Fprint(a.Stdout, content)
+	return nil
+}
+
+func (a *App) runResolve(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("resolve", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	var product string
+	var version string
+	var format string
+	var outputPath string
+
+	fs.StringVar(&product, "product", "", "Product name")
+	fs.StringVar(&version, "version", "", "Release version")
+	fs.StringVar(&format, "format", "json", "Output format")
+	fs.StringVar(&outputPath, "output", "", "Output path")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(version) == "" {
+		return fmt.Errorf("resolve: provide --version")
+	}
+
+	repoRoot, cfg, err := a.loadConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(product) == "" {
+		product = cfg.Project.Name
+	}
+
+	allFragments, records, err := a.loadState(repoRoot, cfg)
+	if err != nil {
+		return err
+	}
+
+	base, err := releases.FindBaseRecord(records, product, version)
+	if err != nil {
+		return err
+	}
+	bundle, err := releases.AssembleRelease(*base, records, allFragments)
+	if err != nil {
+		return err
+	}
+
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "", "json":
+	default:
+		return fmt.Errorf("resolve: unsupported format %q", format)
+	}
+
+	body, err := json.MarshalIndent(bundle, "", "  ")
+	if err != nil {
+		return fmt.Errorf("resolve: marshal bundle: %w", err)
+	}
+	body = append(body, '\n')
+
+	if strings.TrimSpace(outputPath) != "" {
+		if err := os.WriteFile(outputPath, body, 0o644); err != nil {
+			return fmt.Errorf("resolve: write output: %w", err)
+		}
+		return nil
+	}
+
+	_, _ = a.Stdout.Write(body)
 	return nil
 }
 
@@ -454,12 +552,12 @@ func (a *App) runChangelog(ctx context.Context, args []string) error {
 		return err
 	}
 
-	allFragments, manifests, err := a.loadState(repoRoot, cfg)
+	allFragments, records, err := a.loadState(repoRoot, cfg)
 	if err != nil {
 		return err
 	}
 
-	content, err := changelog.Rebuild(repoRoot, cfg, allFragments, manifests)
+	content, err := changelog.Rebuild(repoRoot, cfg, allFragments, records)
 	if err != nil {
 		return err
 	}
@@ -507,16 +605,16 @@ func (a *App) loadConfig(ctx context.Context) (string, config.Config, error) {
 	return repoRoot, cfg, nil
 }
 
-func (a *App) loadState(repoRoot string, cfg config.Config) ([]fragments.Fragment, []releases.Manifest, error) {
+func (a *App) loadState(repoRoot string, cfg config.Config) ([]fragments.Fragment, []releases.ReleaseRecord, error) {
 	allFragments, err := fragments.List(repoRoot, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	manifests, err := releases.List(repoRoot, cfg)
+	records, err := releases.List(repoRoot, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	return allFragments, manifests, nil
+	return allFragments, records, nil
 }
 
 func (a *App) fail(err error) error {
@@ -524,91 +622,79 @@ func (a *App) fail(err error) error {
 	return err
 }
 
-func recommendedStableVersion(cfg config.Config, manifests []releases.Manifest, pending []fragments.Fragment) (versioning.Version, error) {
+func recommendedStableVersion(cfg config.Config, records []releases.ReleaseRecord, product string, pending []fragments.Fragment) (versioning.Version, error) {
 	initial, err := versioning.Parse(cfg.Project.InitialVersion)
 	if err != nil {
 		return versioning.Version{}, fmt.Errorf("parse initial version: %w", err)
 	}
 
 	var latestStable *versioning.Version
-	if manifest := releases.LatestStableHead(manifests); manifest != nil {
-		value := versioning.MustParse(manifest.Version)
+	if record := releases.LatestFinalHeadForProduct(records, product); record != nil {
+		value := versioning.MustParse(record.Version)
 		latestStable = &value
 	}
 
 	return versioning.NextStable(latestStable, initial, highestPendingBump(pending)), nil
 }
 
-func recommendedPreviewVersion(cfg config.Config, manifests []releases.Manifest, target versioning.Version, label string) versioning.Version {
+func recommendedPreviewVersion(cfg config.Config, records []releases.ReleaseRecord, product string, target versioning.Version, label string) versioning.Version {
 	if strings.TrimSpace(label) == "" {
 		label = cfg.Versioning.PrereleaseLabel
 	}
-	current := releases.PreviewVersionsForLine(manifests, target.String(), label)
+	current := releases.PrereleaseVersionsForLine(records, product, target.String(), label)
 	return versioning.NextPrerelease(target, label, current)
 }
 
-func selectReleaseVersion(cfg config.Config, manifests []releases.Manifest, allFragments []fragments.Fragment, requestedVersion, requestedPre, channel string) (versioning.Version, versioning.Version, error) {
-	switch channel {
-	case releases.ChannelPreview, releases.ChannelStable:
-	default:
-		return versioning.Version{}, versioning.Version{}, fmt.Errorf("unsupported release channel %q", channel)
-	}
-
+func selectReleaseVersion(cfg config.Config, records []releases.ReleaseRecord, product string, allFragments []fragments.Fragment, requestedVersion, requestedPre string) (versioning.Version, error) {
 	if strings.TrimSpace(requestedVersion) != "" {
 		version, err := versioning.Parse(requestedVersion)
 		if err != nil {
-			return versioning.Version{}, versioning.Version{}, err
+			return versioning.Version{}, err
 		}
-		if channel == releases.ChannelStable && version.IsPrerelease() {
-			return versioning.Version{}, versioning.Version{}, fmt.Errorf("stable release requires a stable version")
-		}
-		if channel == releases.ChannelPreview && !version.IsPrerelease() {
-			return versioning.Version{}, versioning.Version{}, fmt.Errorf("preview release requires a prerelease version")
-		}
-		return version, version.Stable(), nil
+		return version, nil
 	}
 
-	pending, err := releases.UnreleasedStableFragments(allFragments, manifests)
+	pending, err := releases.UnreleasedFinalFragments(allFragments, records, product)
 	if err != nil {
-		return versioning.Version{}, versioning.Version{}, err
+		return versioning.Version{}, err
 	}
-	target, err := recommendedStableVersion(cfg, manifests, pending)
+	target, err := recommendedStableVersion(cfg, records, product, pending)
 	if err != nil {
-		return versioning.Version{}, versioning.Version{}, err
+		return versioning.Version{}, err
 	}
 
-	if channel == releases.ChannelStable {
-		return target, target, nil
+	if strings.TrimSpace(requestedPre) == "" {
+		return target, nil
 	}
 
-	pre := requestedPre
-	if strings.TrimSpace(pre) == "" {
-		pre = cfg.Versioning.PrereleaseLabel
-	}
-	version := recommendedPreviewVersion(cfg, manifests, target, pre)
-	return version, target, nil
+	return recommendedPreviewVersion(cfg, records, product, target, requestedPre), nil
 }
 
-func selectReleaseFragments(allFragments []fragments.Fragment, manifests []releases.Manifest, version versioning.Version, channel string) ([]fragments.Fragment, error) {
+func selectReleaseFragments(allFragments []fragments.Fragment, records []releases.ReleaseRecord, product string, version versioning.Version) ([]fragments.Fragment, error) {
 	var (
 		selected []fragments.Fragment
 		err      error
 	)
 
-	switch channel {
-	case releases.ChannelStable:
-		selected, err = releases.UnreleasedStableFragments(allFragments, manifests)
-	case releases.ChannelPreview:
-		selected, err = releases.UnreleasedPreviewFragments(allFragments, manifests, version.Stable().String(), version.PreLabel)
-	default:
-		return nil, fmt.Errorf("unsupported release channel %q", channel)
+	if version.IsPrerelease() {
+		label, _, ok := version.PrereleaseLabelNumber()
+		if !ok {
+			return nil, fmt.Errorf("unsupported prerelease format %q", version.String())
+		}
+		selected, err = releases.UnreleasedPrereleaseFragments(allFragments, records, product, version.Stable().String(), label)
+	} else {
+		selected, err = releases.UnreleasedFinalFragments(allFragments, records, product)
 	}
 	if err != nil {
 		return nil, err
 	}
 
 	if len(selected) == 0 {
-		return nil, fmt.Errorf("no fragments available for %s release %s", channel, version.String())
+		releaseKind := "final"
+		if version.IsPrerelease() {
+			releaseKind = "prerelease"
+		}
+		return nil, fmt.Errorf("no fragments available for %s release %s", releaseKind, version.String())
 	}
 
 	slices.SortFunc(selected, func(a, b fragments.Fragment) int {
@@ -623,26 +709,41 @@ func selectReleaseFragments(allFragments []fragments.Fragment, manifests []relea
 	return selected, nil
 }
 
-func selectParentVersion(manifests []releases.Manifest, releaseVersion versioning.Version, channel string) string {
-	switch channel {
-	case releases.ChannelStable:
-		if head := releases.LatestStableHead(manifests); head != nil {
+func selectParentVersion(records []releases.ReleaseRecord, product string, releaseVersion versioning.Version) string {
+	if releaseVersion.IsPrerelease() {
+		label, _, ok := releaseVersion.PrereleaseLabelNumber()
+		if !ok {
+			return ""
+		}
+		if head := releases.PrereleaseHead(records, product, releaseVersion.Stable().String(), label); head != nil {
 			return head.Version
 		}
-	case releases.ChannelPreview:
-		if head := releases.PreviewHead(manifests, releaseVersion.Stable().String(), releaseVersion.PreLabel); head != nil {
+		if head := releases.LatestFinalHeadForProduct(records, product); head != nil {
 			return head.Version
 		}
+		return ""
+	}
+
+	if head := releases.LatestFinalHeadForProduct(records, product); head != nil {
+		return head.Version
 	}
 	return ""
 }
 
-func selectRenderDocument(pack render.TemplatePack, selector *render.Selector, head releases.Manifest) (render.Document, error) {
+func selectRenderDocument(pack render.TemplatePack, head releases.ReleaseRecord, records []releases.ReleaseRecord, allFragments []fragments.Fragment) (render.Document, error) {
 	switch pack.Mode {
 	case config.RenderModeSingleRelease:
-		return selector.Release(head)
+		bundle, err := releases.AssembleRelease(head, records, allFragments)
+		if err != nil {
+			return render.Document{}, err
+		}
+		return render.Document{Bundles: []releases.ReleaseBundle{bundle}}, nil
 	case config.RenderModeReleaseChain:
-		return selector.ReleaseChain(head)
+		bundles, err := releases.AssembleReleaseLineage(head, records, allFragments)
+		if err != nil {
+			return render.Document{}, err
+		}
+		return render.Document{Bundles: bundles}, nil
 	default:
 		return render.Document{}, fmt.Errorf("render pack %q has unsupported mode %q", pack.Name, pack.Mode)
 	}

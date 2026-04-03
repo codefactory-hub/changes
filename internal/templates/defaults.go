@@ -10,7 +10,7 @@ import (
 )
 
 const DefaultRepositoryMarkdownReleaseTemplate = `## {{ .Release.Version }}
-{{- if .Release.Channel }} ({{ .Release.Channel }}){{ end }}
+{{- if .Release.IsPrerelease }} (prerelease){{ else }} (stable){{ end }}
 
 {{- if .Sections }}
 {{- range .Sections }}
@@ -27,7 +27,7 @@ No entries selected for this release.
 `
 
 const DefaultGitHubReleaseTemplate = `# Release {{ .Release.Version }}
-{{- if .Release.TargetVersion }}{{ if ne .Release.TargetVersion .Release.Version }} (targets {{ .Release.TargetVersion }}){{ end }}{{ end }}
+{{- if .Release.IsPrerelease }} (targets {{ .Release.TargetVersion }}){{ end }}
 {{- if .Sections }}
 
 {{- range .Sections }}

@@ -10,8 +10,8 @@ import (
 	"github.com/example/changes/internal/render"
 )
 
-func Rebuild(repoRoot string, cfg config.Config, allFragments []fragments.Fragment, manifests []releases.Manifest) (string, error) {
-	head := releases.LatestStableHead(manifests)
+func Rebuild(repoRoot string, cfg config.Config, allFragments []fragments.Fragment, records []releases.ReleaseRecord) (string, error) {
+	head := releases.LatestFinalHeadForProduct(records, cfg.Project.Name)
 	if head == nil {
 		pack, err := cfg.RenderProfile(config.RenderProfileRepositoryMarkdown)
 		if err != nil {
@@ -23,8 +23,7 @@ func Rebuild(repoRoot string, cfg config.Config, allFragments []fragments.Fragme
 		return pack.DocumentHeader + "\n", nil
 	}
 
-	selector := render.NewSelector(allFragments, manifests)
-	doc, err := selector.ReleaseChain(*head)
+	bundles, err := releases.AssembleReleaseLineage(*head, records, allFragments)
 	if err != nil {
 		return "", err
 	}
@@ -33,7 +32,7 @@ func Rebuild(repoRoot string, cfg config.Config, allFragments []fragments.Fragme
 	if err != nil {
 		return "", err
 	}
-	content, err := renderer.Render(doc)
+	content, err := renderer.Render(render.Document{Bundles: bundles})
 	if err != nil {
 		return "", fmt.Errorf("rebuild changelog: %w", err)
 	}

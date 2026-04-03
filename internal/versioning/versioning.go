@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	semver "github.com/Masterminds/semver/v3"
 )
 
 type Bump string
@@ -16,105 +18,94 @@ const (
 )
 
 type Version struct {
-	Major    int
-	Minor    int
-	Patch    int
-	PreLabel string
-	PreNum   int
+	Major         int
+	Minor         int
+	Patch         int
+	Prerelease    string
+	BuildMetadata string
 }
 
 func Parse(raw string) (Version, error) {
-	var parsed Version
-
-	core, pre, hasPre := strings.Cut(raw, "-")
-	parts := strings.Split(core, ".")
-	if len(parts) != 3 {
-		return Version{}, fmt.Errorf("parse version %q: expected semantic version core", raw)
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return Version{}, fmt.Errorf("parse version %q: version is required", raw)
 	}
 
-	var err error
-	if parsed.Major, err = strconv.Atoi(parts[0]); err != nil {
-		return Version{}, fmt.Errorf("parse version %q: invalid major", raw)
-	}
-	if parsed.Minor, err = strconv.Atoi(parts[1]); err != nil {
-		return Version{}, fmt.Errorf("parse version %q: invalid minor", raw)
-	}
-	if parsed.Patch, err = strconv.Atoi(parts[2]); err != nil {
-		return Version{}, fmt.Errorf("parse version %q: invalid patch", raw)
-	}
-
-	if !hasPre {
-		return parsed, nil
-	}
-
-	preParts := strings.Split(pre, ".")
-	if len(preParts) != 2 {
-		return Version{}, fmt.Errorf("parse version %q: expected prerelease label.number", raw)
-	}
-	parsed.PreLabel = preParts[0]
-	parsed.PreNum, err = strconv.Atoi(preParts[1])
+	parsed, err := semver.StrictNewVersion(value)
 	if err != nil {
-		return Version{}, fmt.Errorf("parse version %q: invalid prerelease number", raw)
+		return Version{}, fmt.Errorf("parse version %q: %w", raw, err)
 	}
 
-	return parsed, nil
+	return Version{
+		Major:         int(parsed.Major()),
+		Minor:         int(parsed.Minor()),
+		Patch:         int(parsed.Patch()),
+		Prerelease:    parsed.Prerelease(),
+		BuildMetadata: parsed.Metadata(),
+	}, nil
 }
 
 func MustParse(raw string) Version {
-	v, err := Parse(raw)
+	version, err := Parse(raw)
 	if err != nil {
 		panic(err)
 	}
-	return v
+	return version
 }
 
 func (v Version) String() string {
-	if v.PreLabel == "" {
-		return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+	base := fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+	if v.Prerelease != "" {
+		base += "-" + v.Prerelease
 	}
-	return fmt.Sprintf("%d.%d.%d-%s.%d", v.Major, v.Minor, v.Patch, v.PreLabel, v.PreNum)
+	if v.BuildMetadata != "" {
+		base += "+" + v.BuildMetadata
+	}
+	return base
 }
 
 func (v Version) Stable() Version {
-	v.PreLabel = ""
-	v.PreNum = 0
+	v.Prerelease = ""
+	v.BuildMetadata = ""
+	return v
+}
+
+func (v Version) WithoutBuildMetadata() Version {
+	v.BuildMetadata = ""
 	return v
 }
 
 func (v Version) IsPrerelease() bool {
-	return v.PreLabel != ""
+	return v.Prerelease != ""
 }
 
-func (v Version) ReleaseLine() string {
-	if v.PreLabel == "" {
-		return v.Stable().String()
+func (v Version) PrereleaseLabelNumber() (string, int, bool) {
+	if v.Prerelease == "" {
+		return "", 0, false
 	}
-	return fmt.Sprintf("%s-%s", v.Stable().String(), v.PreLabel)
+
+	parts := strings.Split(v.Prerelease, ".")
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		return "", 0, false
+	}
+
+	number, err := strconv.Atoi(parts[1])
+	if err != nil || number < 0 {
+		return "", 0, false
+	}
+	return parts[0], number, true
 }
 
 func Compare(a, b Version) int {
-	if a.Major != b.Major {
-		return cmpInt(a.Major, b.Major)
+	left, err := semver.StrictNewVersion(a.String())
+	if err != nil {
+		panic(err)
 	}
-	if a.Minor != b.Minor {
-		return cmpInt(a.Minor, b.Minor)
+	right, err := semver.StrictNewVersion(b.String())
+	if err != nil {
+		panic(err)
 	}
-	if a.Patch != b.Patch {
-		return cmpInt(a.Patch, b.Patch)
-	}
-	if a.PreLabel == "" && b.PreLabel == "" {
-		return 0
-	}
-	if a.PreLabel == "" {
-		return 1
-	}
-	if b.PreLabel == "" {
-		return -1
-	}
-	if a.PreLabel != b.PreLabel {
-		return strings.Compare(a.PreLabel, b.PreLabel)
-	}
-	return cmpInt(a.PreNum, b.PreNum)
+	return left.Compare(right)
 }
 
 func HighestBump(values ...Bump) Bump {
@@ -144,7 +135,7 @@ func NormalizeBump(raw string) (Bump, error) {
 
 func NextStable(latestStable *Version, initial Version, bump Bump) Version {
 	if latestStable == nil {
-		return initial
+		return initial.Stable()
 	}
 
 	next := latestStable.Stable()
@@ -169,33 +160,24 @@ func NextStable(latestStable *Version, initial Version, bump Bump) Version {
 
 func NextPrerelease(target Version, label string, current []Version) Version {
 	next := target.Stable()
-	next.PreLabel = label
-	next.PreNum = 1
+	next.Prerelease = label + ".1"
+	next.BuildMetadata = ""
 
 	for _, item := range current {
 		if item.Stable() != target.Stable() {
 			continue
 		}
-		if item.PreLabel != label {
+		currentLabel, currentNumber, ok := item.PrereleaseLabelNumber()
+		if !ok || currentLabel != label {
 			continue
 		}
-		if item.PreNum >= next.PreNum {
-			next.PreNum = item.PreNum + 1
+		_, nextNumber, _ := next.PrereleaseLabelNumber()
+		if currentNumber >= nextNumber {
+			next.Prerelease = fmt.Sprintf("%s.%d", label, currentNumber+1)
 		}
 	}
 
 	return next
-}
-
-func cmpInt(a, b int) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
 }
 
 func bumpRank(value Bump) int {

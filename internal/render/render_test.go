@@ -32,32 +32,6 @@ func TestAvailablePacksExposeBuiltInProfiles(t *testing.T) {
 	}
 }
 
-func TestSelectorProducesStableDocumentsIndependentOfPack(t *testing.T) {
-	manifest := releases.Manifest{
-		Version:          "0.1.0",
-		TargetVersion:    "0.1.0",
-		Channel:          releases.ChannelStable,
-		CreatedAt:        time.Date(2026, 4, 2, 18, 0, 0, 0, time.UTC),
-		AddedFragmentIDs: []string{"f1"},
-	}
-	allFragments := []fragments.Fragment{
-		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC), Title: "Short title", Type: "fixed", Bump: "patch"}, Body: "first body"},
-	}
-
-	selector := NewSelector(allFragments, []releases.Manifest{manifest})
-	doc, err := selector.Release(manifest)
-	if err != nil {
-		t.Fatalf("Release returned error: %v", err)
-	}
-
-	if len(doc.Releases) != 1 {
-		t.Fatalf("expected one release document, got %d", len(doc.Releases))
-	}
-	if got := doc.Releases[0].Sections[0].Entries[0].Fragment.Title; got != "Short title" {
-		t.Fatalf("selector entry title = %q, want %q", got, "Short title")
-	}
-}
-
 func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 	repoRoot := t.TempDir()
 	cfg := config.Default()
@@ -65,20 +39,18 @@ func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 		t.Fatalf("EnsureDefaultFiles returned error: %v", err)
 	}
 
-	manifest := releases.Manifest{
+	record := releases.ReleaseRecord{
+		Product:          "changes",
 		Version:          "0.1.0",
-		TargetVersion:    "0.1.0",
-		Channel:          releases.ChannelStable,
 		CreatedAt:        time.Date(2026, 4, 2, 18, 0, 0, 0, time.UTC),
 		AddedFragmentIDs: []string{"f1"},
 	}
 	allFragments := []fragments.Fragment{
 		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC), Title: "Short title", Type: "fixed", Bump: "patch"}, Body: "first body"},
 	}
-	selector := NewSelector(allFragments, []releases.Manifest{manifest})
-	doc, err := selector.Release(manifest)
+	bundle, err := releases.AssembleRelease(record, []releases.ReleaseRecord{record}, allFragments)
 	if err != nil {
-		t.Fatalf("Release returned error: %v", err)
+		t.Fatalf("AssembleRelease returned error: %v", err)
 	}
 
 	githubRenderer, err := New(repoRoot, cfg, config.RenderProfileGitHubRelease)
@@ -97,6 +69,8 @@ func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New rpm renderer returned error: %v", err)
 	}
+
+	doc := Document{Bundles: []releases.ReleaseBundle{bundle}}
 
 	githubOutput, err := githubRenderer.Render(doc)
 	if err != nil {
@@ -146,14 +120,14 @@ func TestRenderChainDropsWholeReleaseBlocks(t *testing.T) {
 	}
 
 	doc := Document{
-		Releases: []ReleaseDocument{
+		Bundles: []releases.ReleaseBundle{
 			{
-				Release:  releases.Manifest{Version: "0.2.0", Channel: releases.ChannelStable},
-				Sections: []Section{{Key: "fixed", Title: "Fixed", Entries: []Entry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f1", Title: "Keep me", Type: "fixed", Bump: "patch", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "short"}}}}},
+				Release:  releases.ReleaseRecord{Product: "changes", Version: "0.2.0"},
+				Sections: []releases.BundleSection{{Key: "fixed", Title: "Fixed", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f1", Title: "Keep me", Type: "fixed", Bump: "patch", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "short"}}}}},
 			},
 			{
-				Release:  releases.Manifest{Version: "0.1.0", Channel: releases.ChannelStable},
-				Sections: []Section{{Key: "added", Title: "Added", Entries: []Entry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f2", Title: "Drop me because this block is very long", Type: "added", Bump: "minor", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "long body to trigger omission over the profile max chars threshold"}}}}},
+				Release:  releases.ReleaseRecord{Product: "changes", Version: "0.1.0"},
+				Sections: []releases.BundleSection{{Key: "added", Title: "Added", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f2", Title: "Drop me because this block is very long", Type: "added", Bump: "minor", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "long body to trigger omission over the profile max chars threshold"}}}}},
 			},
 		},
 	}
@@ -193,7 +167,7 @@ func TestRepoLocalTemplateOverridesBuiltInPack(t *testing.T) {
 	}
 
 	doc := Document{
-		Releases: []ReleaseDocument{{Release: releases.Manifest{Version: "0.2.0"}}},
+		Bundles: []releases.ReleaseBundle{{Release: releases.ReleaseRecord{Product: "changes", Version: "0.2.0"}}},
 	}
 	output, err := renderer.Render(doc)
 	if err != nil {

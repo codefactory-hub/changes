@@ -158,6 +158,10 @@ func CollectionsDir(repoRoot string, cfg Config) string {
 	return filepath.Join(StateDir(repoRoot, cfg), "collections")
 }
 
+func CollectChangesDir(repoRoot string) string {
+	return filepath.Join(repoRoot, ".local", "state", "collect-changes")
+}
+
 func ChangelogPath(repoRoot string, cfg Config) string {
 	return filepath.Join(repoRoot, cfg.Project.ChangelogFile)
 }
