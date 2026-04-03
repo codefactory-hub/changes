@@ -14,13 +14,12 @@ If those output formats affect fragment selection or become alternate durable so
 
 Keep `changes` fragment-centric.
 
-External changelog formats are render-time views generated from canonical fragment and manifest data. Built-in template packs may target repository Markdown, release bodies, or package-manager-specific formats, but those outputs do not influence selection semantics or release lineage.
+External changelog formats are render-time views generated from canonical fragment and release-record data. Built-in template packs may target repository Markdown, release bodies, or package-manager-specific formats, but those outputs do not influence selection semantics or release lineage.
 
-Rendering policy belongs to template packs and render configuration, not to release manifests.
+Rendering policy belongs to template packs and render configuration, not to release records.
 
 ## Consequences
 
 - one selection model can feed many output formats
 - output-specific formatting does not distort the release data model
 - repos can customize rendering without changing release semantics
-

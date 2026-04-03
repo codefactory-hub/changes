@@ -34,7 +34,7 @@ type SourceComparison struct {
 	SourceID           string   `json:"source_id"`
 	SourceName         string   `json:"source_name"`
 	FragmentCount      int      `json:"fragment_count"`
-	ManifestCount      int      `json:"manifest_count"`
+	ReleaseRecordCount int      `json:"release_record_count"`
 	OriginalPath       string   `json:"original_path"`
 	RenderedPath       string   `json:"rendered_path"`
 	Recall             float64  `json:"recall"`
@@ -95,20 +95,20 @@ func Reconstruct(repoRoot string, inputPath string, resultSet ResultSet) (Recons
 			sections := extractSections(result)
 			records, err := buildSourceReleaseRecords(result, sourceFragments, sections, resultSet.CollectedAt)
 			if err != nil {
-				return ReconstructionReport{}, fmt.Errorf("build manifests for %s: %w", result.Source.Name, err)
+				return ReconstructionReport{}, fmt.Errorf("build release records for %s: %w", result.Source.Name, err)
 			}
 			if len(records) == 0 {
 				continue
 			}
 
-			manifestDir := config.ReleasesDir(workspace, cfg)
-			if err := os.MkdirAll(manifestDir, 0o755); err != nil {
-				return ReconstructionReport{}, fmt.Errorf("create manifest dir for %s: %w", result.Source.Name, err)
+			recordDir := config.ReleasesDir(workspace, cfg)
+			if err := os.MkdirAll(recordDir, 0o755); err != nil {
+				return ReconstructionReport{}, fmt.Errorf("create release-record dir for %s: %w", result.Source.Name, err)
 			}
 			for _, record := range records {
 				filename := fmt.Sprintf("%s-%s.toml", result.Source.ID, record.Version)
-				if err := writeReleaseRecordAt(filepath.Join(manifestDir, filename), record); err != nil {
-					return ReconstructionReport{}, fmt.Errorf("write manifest for %s: %w", result.Source.Name, err)
+				if err := writeReleaseRecordAt(filepath.Join(recordDir, filename), record); err != nil {
+					return ReconstructionReport{}, fmt.Errorf("write release record for %s: %w", result.Source.Name, err)
 				}
 			}
 
@@ -138,7 +138,7 @@ func Reconstruct(repoRoot string, inputPath string, resultSet ResultSet) (Recons
 			comparison.SourceID = result.Source.ID
 			comparison.SourceName = result.Source.Name
 			comparison.FragmentCount = len(sourceFragments)
-			comparison.ManifestCount = len(records)
+			comparison.ReleaseRecordCount = len(records)
 			comparison.OriginalPath = result.NormalizedPath
 			comparison.RenderedPath = renderedPath
 			productReport.Sources = append(productReport.Sources, comparison)

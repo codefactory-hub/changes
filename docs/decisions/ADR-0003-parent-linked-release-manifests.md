@@ -1,4 +1,4 @@
-# ADR-0003 Parent-linked Release Manifests
+# ADR-0003 Parent-linked Release Records
 
 ## Status
 
@@ -12,13 +12,15 @@ A destructive “consumed fragment” flag does not model preview history cleanl
 
 ## Decision
 
-Represent each release as an append-only manifest that records:
+Represent each release as an append-only base release record that records:
 
 - the emitted `version`
-- the `target_version`
-- the `channel`
 - the immediate `parent_version` within that release line
 - the `added_fragment_ids` newly introduced by that release record
+
+The release identity is `(product, version without build metadata)`.
+
+Base release records must not contain build metadata. Optional companion release records use build metadata to identify additional canonical records for the exact same release.
 
 Preview releases form their own parent-linked lineages. Stable releases form a separate stable lineage.
 
@@ -29,5 +31,4 @@ Fragments reachable from the latest stable head are no longer globally unrelease
 - preview and stable release lines remain structurally separate
 - fragment “consumption” is modeled by lineage reachability rather than destructive mutation
 - release selection remains durable and auditable
-- changelog rebuilds can walk a manifest lineage deterministically
-
+- changelog rebuilds can walk a release-record lineage deterministically

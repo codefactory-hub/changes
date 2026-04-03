@@ -40,7 +40,7 @@ func TestAppEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
 	}
-	if !strings.Contains(string(gitignore), "/.local/state/changes/") {
+	if !strings.Contains(string(gitignore), "/.local/state/") {
 		t.Fatalf(".gitignore missing state dir entry: %s", gitignore)
 	}
 
@@ -113,12 +113,12 @@ func TestAppEndToEnd(t *testing.T) {
 		t.Fatalf("release --pre rc returned error: %v", err)
 	}
 	rc1Path := strings.TrimSpace(stdout.String())
-	rc1Manifest, err := releases.Load(rc1Path)
+	rc1Record, err := releases.Load(rc1Path)
 	if err != nil {
-		t.Fatalf("load rc1 manifest: %v", err)
+		t.Fatalf("load rc1 release record: %v", err)
 	}
-	if rc1Manifest.ParentVersion != "" {
-		t.Fatalf("first prerelease should not have a parent, got %q", rc1Manifest.ParentVersion)
+	if rc1Record.ParentVersion != "" {
+		t.Fatalf("first prerelease should not have a parent, got %q", rc1Record.ParentVersion)
 	}
 
 	stdout.Reset()
@@ -144,12 +144,12 @@ func TestAppEndToEnd(t *testing.T) {
 		t.Fatalf("second release --pre rc returned error: %v", err)
 	}
 	rc2Path := strings.TrimSpace(stdout.String())
-	rc2Manifest, err := releases.Load(rc2Path)
+	rc2Record, err := releases.Load(rc2Path)
 	if err != nil {
-		t.Fatalf("load rc2 manifest: %v", err)
+		t.Fatalf("load rc2 release record: %v", err)
 	}
-	if rc2Manifest.ParentVersion != rc1Manifest.Version {
-		t.Fatalf("rc2 parent = %q, want %q", rc2Manifest.ParentVersion, rc1Manifest.Version)
+	if rc2Record.ParentVersion != rc1Record.Version {
+		t.Fatalf("rc2 parent = %q, want %q", rc2Record.ParentVersion, rc1Record.Version)
 	}
 
 	stdout.Reset()
@@ -174,14 +174,14 @@ func TestAppEndToEnd(t *testing.T) {
 		t.Fatalf("release --pre beta returned error: %v", err)
 	}
 	beta1Path := strings.TrimSpace(stdout.String())
-	beta1Manifest, err := releases.Load(beta1Path)
+	beta1Record, err := releases.Load(beta1Path)
 	if err != nil {
-		t.Fatalf("load beta1 manifest: %v", err)
+		t.Fatalf("load beta1 release record: %v", err)
 	}
-	if beta1Manifest.ParentVersion != "" {
-		t.Fatalf("beta1 should not inherit the rc lineage, got parent %q", beta1Manifest.ParentVersion)
+	if beta1Record.ParentVersion != "" {
+		t.Fatalf("beta1 should not inherit the rc lineage, got parent %q", beta1Record.ParentVersion)
 	}
-	if got := beta1Manifest.AddedFragmentIDs; len(got) != 2 {
+	if got := beta1Record.AddedFragmentIDs; len(got) != 2 {
 		t.Fatalf("beta1 added_fragment_ids = %#v, want both fragments", got)
 	}
 
@@ -209,14 +209,14 @@ func TestAppEndToEnd(t *testing.T) {
 		t.Fatalf("release returned error: %v", err)
 	}
 	stablePath := strings.TrimSpace(stdout.String())
-	stableManifest, err := releases.Load(stablePath)
+	stableRecord, err := releases.Load(stablePath)
 	if err != nil {
-		t.Fatalf("load stable manifest: %v", err)
+		t.Fatalf("load stable release record: %v", err)
 	}
-	if stableManifest.ParentVersion != "" {
-		t.Fatalf("first stable should not have a parent, got %q", stableManifest.ParentVersion)
+	if stableRecord.ParentVersion != "" {
+		t.Fatalf("first stable should not have a parent, got %q", stableRecord.ParentVersion)
 	}
-	if got := stableManifest.AddedFragmentIDs; len(got) != 2 {
+	if got := stableRecord.AddedFragmentIDs; len(got) != 2 {
 		t.Fatalf("stable added_fragment_ids = %#v, want both fragments", got)
 	}
 

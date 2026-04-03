@@ -9,17 +9,15 @@ Evolve `changes` around four layers with distinct responsibilities:
 - `EditorialPackage`: a derived editorial communication artifact for one release
 - `RenderedRelease`: the final formatted output for a specific surface
 
-The first milestone replaces the current manifest-centric model with product-aware release records, a library-backed SemVer model, companion-record support, and deterministic release-bundle assembly.
+The first milestone replaces the bootstrap-era manifest-centric model with product-aware release records, a library-backed SemVer model, companion-record support, and deterministic release-bundle assembly.
 
 ## Design constraints
 
-- `Manifest` becomes `ReleaseRecord` across code, tests, docs, and CLI language.
+- `ReleaseRecord` is the canonical release-file vocabulary across code, tests, docs, and CLI language.
 - Release records are stored under `.local/share/changes/releases/`.
 - Release record filenames follow `<product>-<version>.toml`.
 - Every release record file includes both `product` and `version` in the file body.
 - `version` is the only persisted version identity field.
-- `target_version` is derived from `version` and is not stored.
-- `channel` is not stored.
 - No opaque release-record ID is introduced.
 - `github.com/Masterminds/semver/v3` is the version authority.
 - A base release record is required for every release identity.
@@ -32,7 +30,6 @@ The first milestone replaces the current manifest-centric model with product-awa
 
 ## Milestone 1
 
-- Rename `Manifest` to `ReleaseRecord`.
 - Replace the hand-rolled version parser with `github.com/Masterminds/semver/v3`.
 - Define base-record and companion-record schemas.
 - Make product first-class in release storage and lookup.
@@ -115,4 +112,4 @@ Ownership split:
 
 - persisted `EditorialPackage` artifacts derived from `ReleaseBundle`
 - AI-assisted editorial drafting on top of `ReleaseBundle` and `EditorialPackage`
-- channel-specific render/export adapters that consume `ReleaseBundle` or `EditorialPackage`
+- surface-specific render/export adapters that consume `ReleaseBundle` or `EditorialPackage`

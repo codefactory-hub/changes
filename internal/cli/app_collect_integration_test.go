@@ -46,7 +46,10 @@ func TestAppCollectsConfiguredChangelogSources(t *testing.T) {
 		t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
 	}
 
-	catalogPath := filepath.Join(repoRoot, "catalog.toml")
+	catalogPath := filepath.Join(repoRoot, ".local/state/catalog.toml")
+	if err := os.MkdirAll(filepath.Dir(catalogPath), 0o755); err != nil {
+		t.Fatalf("create catalog dir: %v", err)
+	}
 	if err := os.WriteFile(catalogPath, []byte(`
 [[sources]]
 name = "Go"
@@ -62,7 +65,7 @@ format = "html"
 
 	outputPath := filepath.Join(repoRoot, ".local/state/changes/collection-report.md")
 	stdout.Reset()
-	if err := app.Run(context.Background(), []string{"collect", "--catalog", "catalog.toml", "--output", outputPath}); err != nil {
+	if err := app.Run(context.Background(), []string{"collect", "--catalog", ".local/state/catalog.toml", "--output", outputPath}); err != nil {
 		t.Fatalf("collect returned error: %v\nstderr=%s", err, stderr.String())
 	}
 

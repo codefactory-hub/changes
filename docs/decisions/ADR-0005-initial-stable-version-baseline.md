@@ -12,7 +12,7 @@ Inventing a synthetic earlier release would complicate the first layer and blur 
 
 ## Decision
 
-If the repository has no stable release manifests, treat `project.initial_version` as the first stable target baseline.
+If the repository has no stable base release records, treat `project.initial_version` as the first stable baseline.
 
 After the first stable release exists, compute future stable targets by applying the highest unreleased bump to the latest stable version in the stable lineage.
 
@@ -21,4 +21,3 @@ After the first stable release exists, compute future stable targets by applying
 - first-release version recommendation is deterministic without synthetic history
 - the first layer stays simple and explicit
 - some advanced historical import and migration cases remain future work
-

@@ -14,7 +14,7 @@ import (
 	"github.com/example/changes/internal/config"
 )
 
-func TestReconstructWritesManifestsRenderedOutputAndReport(t *testing.T) {
+func TestReconstructWritesReleaseRecordsRenderedOutputAndReport(t *testing.T) {
 	repoRoot := t.TempDir()
 	cfg := config.Default()
 	now := time.Date(2026, 4, 3, 4, 0, 0, 0, time.UTC)
@@ -88,12 +88,12 @@ func TestReconstructWritesManifestsRenderedOutputAndReport(t *testing.T) {
 	if err := json.Unmarshal(rawReport, &decoded); err != nil {
 		t.Fatalf("decode report: %v", err)
 	}
-	if decoded.Products[0].Sources[0].ManifestCount != 2 {
-		t.Fatalf("manifest count = %d, want 2", decoded.Products[0].Sources[0].ManifestCount)
+	if decoded.Products[0].Sources[0].ReleaseRecordCount != 2 {
+		t.Fatalf("release record count = %d, want 2", decoded.Products[0].Sources[0].ReleaseRecordCount)
 	}
 }
 
-func TestReconstructBuildsSingleManifestForStructuredReleaseDocument(t *testing.T) {
+func TestReconstructBuildsSingleReleaseRecordForStructuredReleaseDocument(t *testing.T) {
 	repoRoot := t.TempDir()
 	cfg := config.Default()
 	now := time.Date(2026, 4, 3, 4, 0, 0, 0, time.UTC)
@@ -165,7 +165,7 @@ Intro paragraph.
 		t.Fatalf("rendered output missing expected release metadata or section entries:\n%s", rendered)
 	}
 
-	if got := report.Products[0].Sources[0].ManifestCount; got != 1 {
-		t.Fatalf("manifest count = %d, want 1", got)
+	if got := report.Products[0].Sources[0].ReleaseRecordCount; got != 1 {
+		t.Fatalf("release record count = %d, want 1", got)
 	}
 }

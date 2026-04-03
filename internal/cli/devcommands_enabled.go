@@ -107,7 +107,7 @@ func (a *App) runCollectDrafts(ctx context.Context, args []string) error {
 	var inputPath string
 	var outputDir string
 
-	fs.StringVar(&inputPath, "input", "", "Path to collection manifest.json or rendered collection JSON")
+	fs.StringVar(&inputPath, "input", "", "Path to collection snapshot manifest.json or rendered collection JSON")
 	fs.StringVar(&outputDir, "output-dir", "", "Root directory for collect-changes product workspaces")
 
 	if err := fs.Parse(args); err != nil {
@@ -152,7 +152,7 @@ func (a *App) runCollectReconstruct(ctx context.Context, args []string) error {
 
 	var inputPath string
 
-	fs.StringVar(&inputPath, "input", "", "Path to collection manifest.json or rendered collection JSON")
+	fs.StringVar(&inputPath, "input", "", "Path to collection snapshot manifest.json or rendered collection JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

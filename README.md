@@ -15,7 +15,7 @@ Committed:
 
 Transient:
 
-- `.local/state/changes/`
+- `.local/state/`
 
 The tool always resolves the target repository root from Git. If a command runs outside a Git repository, it fails cleanly.
 
@@ -71,8 +71,8 @@ Upstream changelog collection is a development-only workflow. It is compiled onl
 - Input is a TOML catalog of remote changelog sources.
 - Raw responses and normalized text snapshots are written under `.local/state/changes/collections/<timestamp>/`.
 - Output can be rendered as Markdown or JSON for inspection and downstream processing.
-- Invoke it with `go run -tags devtools ./cmd/changes collect --catalog catalog.toml`.
-- Or use the repo-local wrapper: `./scripts/collect-changelogs --catalog catalog.toml`.
+- Invoke it with `go run -tags devtools ./cmd/changes collect --catalog .local/state/catalog.toml`.
+- Or use the repo-local wrapper: `./scripts/collect-changelogs --catalog .local/state/catalog.toml`.
 - To turn a collected snapshot into fragment files in ignored state storage, run `go run -tags devtools ./cmd/changes collect drafts --input .local/state/changes/catalog-check.json`.
 - The extractor attempts to split each upstream changelog into release/version sections and write one fragment per extracted section.
 - Extracted fragments are written per product under `.local/state/collect-changes/<product>/changes/fragments/`.

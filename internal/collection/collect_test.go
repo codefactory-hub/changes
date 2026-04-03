@@ -69,7 +69,7 @@ func TestCollectWritesSnapshotsAndNormalizesMarkdownAndHTML(t *testing.T) {
 	}
 
 	if _, err := os.Stat(filepath.Join(corpus.SnapshotDir, "manifest.json")); err != nil {
-		t.Fatalf("manifest.json missing: %v", err)
+		t.Fatalf("collection snapshot manifest.json missing: %v", err)
 	}
 
 	goResult := corpus.Results[0]

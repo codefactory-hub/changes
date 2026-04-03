@@ -16,11 +16,10 @@ Treat fragment files as durable source artifacts.
 
 Releases do not delete fragments and do not rewrite fragment content as part of normal release creation.
 
-Fragments remain the authoring unit for change entries, while release manifests record which fragments were added to a given release line step.
+Fragments remain the authoring unit for change entries, while base release records record which fragments were added to a given release-line step.
 
 ## Consequences
 
 - release-note source records remain auditable after release creation
-- historical changelog sections can be regenerated from fragments plus manifests
+- historical changelog sections can be regenerated from fragments plus release records
 - preview and stable releases can reference the same underlying fragment set without destructive mutation
-

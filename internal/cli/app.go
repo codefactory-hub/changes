@@ -383,13 +383,13 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 	fs.SetOutput(io.Discard)
 
 	var version string
-	var manifestPath string
+	var recordPath string
 	var profile string
 	var outputPath string
 	var product string
 
 	fs.StringVar(&version, "version", "", "Release version")
-	fs.StringVar(&manifestPath, "manifest", "", "Explicit release record path")
+	fs.StringVar(&recordPath, "record", "", "Explicit release record path")
 	fs.StringVar(&profile, "profile", config.RenderProfileGitHubRelease, "Render profile")
 	fs.StringVar(&outputPath, "output", "", "Output path")
 	fs.StringVar(&product, "product", "", "Product name")
@@ -398,8 +398,8 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 		return err
 	}
 
-	if strings.TrimSpace(version) == "" && strings.TrimSpace(manifestPath) == "" {
-		return fmt.Errorf("render: provide --version or --manifest")
+	if strings.TrimSpace(version) == "" && strings.TrimSpace(recordPath) == "" {
+		return fmt.Errorf("render: provide --version or --record")
 	}
 
 	repoRoot, cfg, err := a.loadConfig(ctx)
@@ -416,8 +416,8 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 	}
 
 	var record releases.ReleaseRecord
-	if strings.TrimSpace(manifestPath) != "" {
-		record, err = releases.Load(manifestPath)
+	if strings.TrimSpace(recordPath) != "" {
+		record, err = releases.Load(recordPath)
 	} else {
 		base, findErr := releases.FindBaseRecord(records, product, version)
 		if findErr != nil {
@@ -763,7 +763,7 @@ func highestPendingBump(items []fragments.Fragment) versioning.Bump {
 
 func ensureGitignore(repoRoot string) error {
 	path := filepath.Join(repoRoot, ".gitignore")
-	entry := "/.local/state/changes/"
+	entry := "/.local/state/"
 
 	raw, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
