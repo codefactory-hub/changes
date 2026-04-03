@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+export GOCACHE="$repo_root/.cache/go-build"
+export GOPATH="$repo_root/.local/share/go"
+export GOMODCACHE="$repo_root/.local/share/go/pkg/mod"
+export GOBIN="$repo_root/.local/share/go/bin"
+
+exec go run -tags devtools ./cmd/changes collect "$@"

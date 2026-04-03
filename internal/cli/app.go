@@ -22,10 +22,11 @@ import (
 )
 
 type App struct {
-	Stdout io.Writer
-	Stderr io.Writer
-	Now    func() time.Time
-	Random io.Reader
+	Stdout     io.Writer
+	Stderr     io.Writer
+	Now        func() time.Time
+	Random     io.Reader
+	HTTPClient any
 }
 
 func NewApp(stdout, stderr io.Writer) *App {
@@ -41,7 +42,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.fail(fmt.Errorf("usage: changes <command>"))
 	}
 
-	var err error
+	handled, err := a.runOptionalCommand(ctx, args)
+	if err != nil {
+		return a.fail(err)
+	}
+	if handled {
+		return nil
+	}
+
 	switch args[0] {
 	case "init":
 		err = a.runInit(ctx, args[1:])

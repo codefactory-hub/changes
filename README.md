@@ -57,6 +57,30 @@ changes changelog rebuild [--output path]
 - Multi-release trimming drops whole release blocks from the tail of the rendered chain. It never truncates inside an entry body.
 - Repo-local template files override the built-in pack templates without changing manifest semantics.
 
+## Development-only Collection
+
+Upstream changelog collection is a development-only workflow. It is compiled only when you opt into the `devtools` build tag, and it is not part of the distributed `changes` binary.
+
+- Input is a TOML catalog of remote changelog sources.
+- Raw responses and normalized text snapshots are written under `.local/state/changes/collections/<timestamp>/`.
+- Output can be rendered as Markdown or JSON for inspection and downstream processing.
+- Invoke it with `go run -tags devtools ./cmd/changes collect --catalog catalog.toml`.
+- Or use the repo-local wrapper: `./scripts/collect-changelogs --catalog catalog.toml`.
+
+Example catalog:
+
+```toml
+[[sources]]
+name = "Go"
+url = "https://go.dev/doc/devel/release"
+format = "html"
+
+[[sources]]
+name = "Node.js"
+url = "https://raw.githubusercontent.com/nodejs/node/main/doc/changelogs/CHANGELOG_V22.md"
+format = "markdown"
+```
+
 ## Development
 
 This repo is intentionally bootstrapped with a modest standard-library-first CLI and a single TOML dependency.
