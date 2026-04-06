@@ -1,6 +1,6 @@
 # `changes`
 
-`changes` is a fragment-driven changelog and release-notes CLI for Git repositories. It is inspired by Changesets in spirit, but uses repo-local XDG-style directories, durable fragments, and per-release records instead of destructive fragment deletion.
+`changes` is a fragment-driven changelog and release-notes CLI for Git repositories. It uses repo-local XDG-style directories, durable fragments, and per-release records instead of destructive fragment deletion.
 
 `changes` is fragment-centric. External changelog formats are views generated from fragments plus release records; they are not the source of truth.
 
@@ -44,10 +44,9 @@ changes release --pre rc
 changes release --version 1.2.0
 changes release --bump minor
 changes release --yes
-changes resolve --product cli --version 1.2.0 [--format json] [--output path]
 changes render --version 1.2.0-rc.1 [--profile github_release] [--output path]
+changes render --latest --profile repository_markdown > CHANGELOG.md
 changes render profiles
-changes changelog rebuild [--output path]
 ```
 
 Interactive authoring prompts for optional `name` stem and body text when you run `create` in a TTY. Use `--edit` when the body needs richer Markdown than a single prompt line.
@@ -96,7 +95,7 @@ Inspect the derived impact evidence with `changes status --explain`. In a TTY, `
 - Base release records carry lineage, fragment selection, and release-wide structure such as sections and display fields.
 - Init can create a standard bootstrap adoption release and fragment for an already-released product. Those artifacts are ordinary renderable history and establish the current-version baseline for later `status` and `release` calculations.
 - `ReleaseBundle` is the assembled factual data for one release: base record, companion records, lineage context, selected fragments, and ordered sections.
-- Final releases form the canonical parent-linked lineage used for changelog rebuilds.
+- Final releases form the canonical parent-linked lineage used for repository changelog rendering.
 - Prereleases are ordinary SemVer prereleases such as `alpha`, `beta`, `rc`, or any other valid label.
 - A later prerelease with the same label excludes fragments already reachable from its own same-label parent chain.
 - Changing prerelease labels starts a fresh prerelease lineage for the same target version.
@@ -159,8 +158,10 @@ That policy drives the tool's recommendation. `changes status --explain` and int
 
 ## Rendering
 
+- `render` is the public output command.
 - Render behavior is configured through named template packs in `.config/changes/config.toml`.
 - The built-in packs are `repository_markdown`, `github_release`, `tester_summary`, `debian_changelog`, and `rpm_changelog`.
+- `changes render --latest --profile repository_markdown` is the public path for rebuilding `CHANGELOG.md`.
 - Single-release packs render only the selected `ReleaseBundle`.
 - Chain-style packs walk `parent_version` backward from the chosen base release record and render each assembled bundle in the lineage.
 - Multi-release trimming drops whole release blocks from the tail of the rendered chain. It never truncates inside an entry body.

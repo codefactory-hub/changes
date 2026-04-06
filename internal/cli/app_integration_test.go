@@ -220,11 +220,10 @@ func TestAppEndToEnd(t *testing.T) {
 		t.Fatalf("debian render missing expected header:\n%s", stdout.String())
 	}
 
-	stdout.Reset()
-	if err := app.Run(context.Background(), []string{"changelog", "rebuild"}); err != nil {
-		t.Fatalf("changelog rebuild returned error: %v", err)
+	changelogPath := filepath.Join(repoRoot, "CHANGELOG.rendered.md")
+	if err := app.Run(context.Background(), []string{"render", "--latest", "--profile", config.RenderProfileRepositoryMarkdown, "--output", changelogPath}); err != nil {
+		t.Fatalf("render latest repository markdown returned error: %v", err)
 	}
-	changelogPath := strings.TrimSpace(stdout.String())
 	changelogBytes, err := os.ReadFile(changelogPath)
 	if err != nil {
 		t.Fatalf("read changelog: %v", err)
@@ -242,73 +241,6 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 }
 
-func TestAppResolveEmitsReleaseBundleJSON(t *testing.T) {
-	repoRoot := t.TempDir()
-	gitInit(t, repoRoot)
-	t.Chdir(repoRoot)
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	app := NewApp(&stdout, &stderr)
-	app.Now = func() time.Time {
-		return time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
-	}
-	app.Random = bytes.NewReader([]byte{0, 1, 2, 3, 4, 5, 6, 7})
-
-	if err := app.Run(context.Background(), []string{"init"}); err != nil {
-		t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
-	}
-	if err := app.Run(context.Background(), []string{
-		"create",
-		"--public-api", "add",
-		"--type", "added",
-		"--section-key", "highlights",
-		"--customer-visible",
-		"--release-notes-priority", "2",
-		"Introduce highlights section.\n\nExpose a faster path.",
-	}); err != nil {
-		t.Fatalf("create returned error: %v\nstderr=%s", err, stderr.String())
-	}
-
-	stdout.Reset()
-	if err := app.Run(context.Background(), []string{"release", "--yes"}); err != nil {
-		t.Fatalf("release returned error: %v", err)
-	}
-
-	cfg, err := config.Load(repoRoot)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	product := cfg.Project.Name
-	companion := releases.ReleaseRecord{
-		Product:          product,
-		Version:          "0.1.0+docs.1",
-		CreatedAt:        time.Date(2026, 4, 3, 12, 30, 0, 0, time.UTC),
-		CompanionPurpose: "docs",
-		SourceURL:        "https://example.invalid/docs",
-	}
-	if _, err := releases.Write(repoRoot, cfg, companion); err != nil {
-		t.Fatalf("write companion record: %v", err)
-	}
-
-	stdout.Reset()
-	if err := app.Run(context.Background(), []string{"resolve", "--version", "0.1.0"}); err != nil {
-		t.Fatalf("resolve returned error: %v", err)
-	}
-
-	body := stdout.String()
-	if !strings.Contains(body, "\"version\": \"0.1.0\"") {
-		t.Fatalf("resolve output missing base version:\n%s", body)
-	}
-	if !strings.Contains(body, "\"version\": \"0.1.0+docs.1\"") {
-		t.Fatalf("resolve output missing companion version:\n%s", body)
-	}
-	if !strings.Contains(body, "\"must_include_fragment_ids\": [") {
-		t.Fatalf("resolve output missing must_include_fragment_ids:\n%s", body)
-	}
-}
-
 func TestAppHelpSurface(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -322,11 +254,14 @@ func TestAppHelpSurface(t *testing.T) {
 	if !strings.Contains(rootHelp, "Usage:") || !strings.Contains(rootHelp, "changes <command> [options]") {
 		t.Fatalf("root help missing usage:\n%s", rootHelp)
 	}
-	if !strings.Contains(rootHelp, "create") || !strings.Contains(rootHelp, "render profiles") || !strings.Contains(rootHelp, "changelog rebuild") {
+	if !strings.Contains(rootHelp, "create") || !strings.Contains(rootHelp, "render profiles") {
 		t.Fatalf("root help missing commands:\n%s", rootHelp)
 	}
 	if strings.Contains(rootHelp, "version next") {
 		t.Fatalf("root help should not mention version next:\n%s", rootHelp)
+	}
+	if strings.Contains(rootHelp, "resolve") || strings.Contains(rootHelp, "changelog rebuild") {
+		t.Fatalf("root help should not expose resolve or changelog rebuild:\n%s", rootHelp)
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("root --help should not write stderr:\n%s", stderr.String())
@@ -340,6 +275,9 @@ func TestAppHelpSurface(t *testing.T) {
 	renderHelp := stdout.String()
 	if !strings.Contains(renderHelp, "changes render --version <version>") {
 		t.Fatalf("render help missing version usage:\n%s", renderHelp)
+	}
+	if !strings.Contains(renderHelp, "changes render --latest") {
+		t.Fatalf("render help missing latest usage:\n%s", renderHelp)
 	}
 	if !strings.Contains(renderHelp, "changes render --record <path>") {
 		t.Fatalf("render help missing record usage:\n%s", renderHelp)
@@ -355,6 +293,20 @@ func TestAppHelpSurface(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("render --help should not write stderr:\n%s", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err := app.Run(context.Background(), []string{"resolve"})
+	if err == nil || !strings.Contains(stderr.String(), `unknown command "resolve"`) {
+		t.Fatalf("resolve should be rejected:\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err = app.Run(context.Background(), []string{"changelog", "rebuild"})
+	if err == nil || !strings.Contains(stderr.String(), `unknown command "changelog"`) {
+		t.Fatalf("changelog should be rejected:\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
 	}
 }
 

@@ -33,7 +33,7 @@ Set these as GitHub repository variables unless your hosting provider uses a dif
 The workflow currently tries to run:
 
 ```bash
-go run ./cmd/changes changelog rebuild --output .dist/release-notes.md
+go run ./cmd/changes render --latest --profile repository_markdown --output .dist/release-notes.md
 ```
 
 If the CLI is not present yet, the workflow writes a placeholder file so release automation stays coherent during bootstrap.

@@ -31,4 +31,4 @@ Fragments reachable from the latest stable head are no longer globally unrelease
 - preview and stable release lines remain structurally separate
 - fragment “consumption” is modeled by lineage reachability rather than destructive mutation
 - release selection remains durable and auditable
-- changelog rebuilds can walk a release-record lineage deterministically
+- repository changelog rendering can walk a release-record lineage deterministically

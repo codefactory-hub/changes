@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/example/changes/internal/changelog"
 	"github.com/example/changes/internal/config"
 	"github.com/example/changes/internal/fragments"
 	"github.com/example/changes/internal/releases"
@@ -79,10 +77,6 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		err = a.runRelease(ctx, args[1:])
 	case "render":
 		err = a.runRender(ctx, args[1:])
-	case "resolve":
-		err = a.runResolve(ctx, args[1:])
-	case "changelog":
-		err = a.runChangelog(ctx, args[1:])
 	default:
 		err = fmt.Errorf("unknown command %q", args[0])
 	}
@@ -396,19 +390,31 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 	var profile string
 	var outputPath string
 	var product string
+	var latest bool
 
 	fs.StringVar(&version, "version", "", "Release version")
 	fs.StringVar(&recordPath, "record", "", "Explicit release record path")
 	fs.StringVar(&profile, "profile", config.RenderProfileGitHubRelease, "Render profile")
 	fs.StringVar(&outputPath, "output", "", "Output path")
 	fs.StringVar(&product, "product", "", "Product name")
+	fs.BoolVar(&latest, "latest", false, "Render from the latest final release for the selected product")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	if strings.TrimSpace(version) == "" && strings.TrimSpace(recordPath) == "" {
-		return fmt.Errorf("render: provide --version or --record")
+	selectorCount := 0
+	if strings.TrimSpace(version) != "" {
+		selectorCount++
+	}
+	if strings.TrimSpace(recordPath) != "" {
+		selectorCount++
+	}
+	if latest {
+		selectorCount++
+	}
+	if selectorCount != 1 {
+		return fmt.Errorf("render: provide exactly one of --version, --record, or --latest")
 	}
 
 	repoRoot, cfg, err := a.loadConfig(ctx)
@@ -427,6 +433,12 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 	var record releases.ReleaseRecord
 	if strings.TrimSpace(recordPath) != "" {
 		record, err = releases.Load(recordPath)
+	} else if latest {
+		head := releases.LatestFinalHeadForProduct(records, product)
+		if head == nil {
+			return fmt.Errorf("render: no final release records exist for product %q", product)
+		}
+		record = *head
 	} else {
 		base, findErr := releases.FindBaseRecord(records, product, version)
 		if findErr != nil {
@@ -459,76 +471,6 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 	return nil
 }
 
-func (a *App) runResolve(ctx context.Context, args []string) error {
-	if wantsHelp(args) {
-		a.printHelp([]string{"resolve"})
-		return nil
-	}
-	fs := flag.NewFlagSet("resolve", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-
-	var product string
-	var version string
-	var format string
-	var outputPath string
-
-	fs.StringVar(&product, "product", "", "Product name")
-	fs.StringVar(&version, "version", "", "Release version")
-	fs.StringVar(&format, "format", "json", "Output format")
-	fs.StringVar(&outputPath, "output", "", "Output path")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if strings.TrimSpace(version) == "" {
-		return fmt.Errorf("resolve: provide --version")
-	}
-
-	repoRoot, cfg, err := a.loadConfig(ctx)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(product) == "" {
-		product = cfg.Project.Name
-	}
-
-	allFragments, records, err := a.loadState(repoRoot, cfg)
-	if err != nil {
-		return err
-	}
-
-	base, err := releases.FindBaseRecord(records, product, version)
-	if err != nil {
-		return err
-	}
-	bundle, err := releases.AssembleRelease(*base, records, allFragments)
-	if err != nil {
-		return err
-	}
-
-	switch strings.ToLower(strings.TrimSpace(format)) {
-	case "", "json":
-	default:
-		return fmt.Errorf("resolve: unsupported format %q", format)
-	}
-
-	body, err := json.MarshalIndent(bundle, "", "  ")
-	if err != nil {
-		return fmt.Errorf("resolve: marshal bundle: %w", err)
-	}
-	body = append(body, '\n')
-
-	if strings.TrimSpace(outputPath) != "" {
-		if err := os.WriteFile(outputPath, body, 0o644); err != nil {
-			return fmt.Errorf("resolve: write output: %w", err)
-		}
-		return nil
-	}
-
-	_, _ = a.Stdout.Write(body)
-	return nil
-}
-
 func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
 	if wantsHelp(args) {
 		a.printHelp([]string{"render", "profiles"})
@@ -548,58 +490,6 @@ func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
 	for _, pack := range render.AvailablePacks(cfg) {
 		_, _ = fmt.Fprintf(a.Stdout, "%s\t%s\t%s\n", pack.Name, pack.Mode, pack.Description)
 	}
-	return nil
-}
-
-func (a *App) runChangelog(ctx context.Context, args []string) error {
-	if len(args) == 1 && isHelpArg(args[0]) {
-		a.printHelp([]string{"changelog"})
-		return nil
-	}
-	if len(args) >= 2 && args[0] == "rebuild" && wantsHelp(args[1:]) {
-		a.printHelp([]string{"changelog", "rebuild"})
-		return nil
-	}
-	if len(args) == 0 || args[0] != "rebuild" {
-		return fmt.Errorf("usage: changes changelog rebuild")
-	}
-
-	fs := flag.NewFlagSet("changelog rebuild", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	var outputPath string
-	fs.StringVar(&outputPath, "output", "", "Output path")
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
-	}
-
-	repoRoot, cfg, err := a.loadConfig(ctx)
-	if err != nil {
-		return err
-	}
-
-	allFragments, records, err := a.loadState(repoRoot, cfg)
-	if err != nil {
-		return err
-	}
-
-	content, err := changelog.Rebuild(repoRoot, cfg, allFragments, records)
-	if err != nil {
-		return err
-	}
-
-	path := config.ChangelogPath(repoRoot, cfg)
-	if err := changelog.Write(repoRoot, cfg, content); err != nil {
-		return err
-	}
-
-	if strings.TrimSpace(outputPath) != "" {
-		if err := os.WriteFile(outputPath, []byte(content), 0o644); err != nil {
-			return fmt.Errorf("write changelog output: %w", err)
-		}
-		path = outputPath
-	}
-
-	_, _ = fmt.Fprintf(a.Stdout, "%s\n", path)
 	return nil
 }
 
@@ -675,10 +565,8 @@ Commands:
   create
   status
   release
-  resolve
   render
   render profiles
-  changelog rebuild
 
 Use "changes help <command>" or "changes <command> --help" for details.
 `)
@@ -729,17 +617,11 @@ Usage:
 
 Create a base release record for the selected release. In a TTY, the command shows the release evidence and lets you accept or override the default recommendation unless you pass --yes.
 `)
-	case "resolve":
-		body = strings.TrimSpace(`
-Usage:
-  changes resolve --version <version> [--product <name>] [--format json] [--output <path>]
-
-Assemble and emit the ReleaseBundle for one release.
-`)
 	case "render":
 		body = strings.TrimSpace(`
 Usage:
   changes render --version <version> [--product <name>] [--profile <name>] [--output <path>]
+  changes render --latest [--product <name>] [--profile <name>] [--output <path>]
   changes render --record <path> [--profile <name>] [--output <path>]
   changes render profiles
 
@@ -751,20 +633,6 @@ Usage:
   changes render profiles
 
 List the available render profiles.
-`)
-	case "changelog":
-		body = strings.TrimSpace(`
-Usage:
-  changes changelog rebuild [--output <path>]
-
-Rebuild the repository changelog from the current final release lineage.
-`)
-	case "changelog rebuild":
-		body = strings.TrimSpace(`
-Usage:
-  changes changelog rebuild [--output <path>]
-
-Rebuild the repository changelog from the current final release lineage.
 `)
 	default:
 		body = strings.TrimSpace(`
