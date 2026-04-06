@@ -34,9 +34,9 @@
 
 - [ ] **CMD-01**: `changes doctor` can inspect active layout resolution, precedence, and ambiguity state for global and repo scopes
 - [ ] **CMD-02**: `changes doctor --migration-prompt` can generate migration help between supported layouts
-- [ ] **CMD-03**: Documentation explains the defaults, precedence, and difference between global vs repo-local layout overrides
-- [ ] **CMD-04**: `changes init` and `changes init global` expose clean, documented layout-selection flags
-- [ ] **CMD-05**: Documentation includes proposal-quality examples before implementation details are finalized
+- [x] **CMD-03**: Documentation explains the defaults, precedence, and difference between global vs repo-local layout overrides
+- [x] **CMD-04**: `changes init` and `changes init global` expose clean, documented layout-selection flags
+- [x] **CMD-05**: Documentation includes proposal-quality examples before implementation details are finalized
 - [ ] **CMD-06**: Repo-local initialization updates `.gitignore` so the authoritative repo-local `state` directory is ignored consistently
 
 ## v2 Requirements
@@ -74,9 +74,9 @@
 | MIGR-04 | Phase 3 | Pending |
 | CMD-01 | Phase 1 | Pending |
 | CMD-02 | Phase 1 | Pending |
-| CMD-03 | Phase 1 | Pending |
-| CMD-04 | Phase 1 | Pending |
-| CMD-05 | Phase 1 | Pending |
+| CMD-03 | Phase 1 | Complete |
+| CMD-04 | Phase 1 | Complete |
+| CMD-05 | Phase 1 | Complete |
 | CMD-06 | Phase 4 | Pending |
 
 **Coverage:**

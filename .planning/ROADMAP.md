@@ -25,7 +25,7 @@ This roadmap starts with explicit design work so layout semantics, precedence, m
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Lock the governing layout proposal, precedence rules, and command contracts
+- [x] 01-01-PLAN.md — Lock the governing layout proposal, precedence rules, and command contracts
 - [ ] 01-02-PLAN.md — Validate proposal coverage, doctor UX, and the Phase 2 implementation gate
 
 ### Phase 2: Resolution Core
@@ -91,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Layout Proposal | 0/2 | Not started | - |
+| 1. Layout Proposal | 1/2 | In Progress | - |
 | 2. Resolution Core | 0/2 | Not started | - |
 | 3. Authority and Safety | 0/2 | Not started | - |
 | 4. Command UX and Migration Help | 0/2 | Not started | - |
