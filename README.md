@@ -187,34 +187,18 @@ That policy drives the tool's recommendation. `changes status --explain` and int
 - Multi-release trimming drops whole release blocks from the tail of the rendered chain. It never truncates inside an entry body.
 - Repo-local template files override the built-in pack templates without changing release-record semantics.
 
-## Development-only Collection
+## Further Reading
 
-Upstream changelog collection is a development-only workflow. It is compiled only when you opt into the `devtools` build tag, and it is not part of the distributed `changes` binary.
+These references are useful background for how `changes` thinks about compatibility, release impact, and why “breaking change” is not always reducible to a single SemVer label.
 
-- Input is a TOML catalog of remote changelog sources.
-- Raw responses and normalized text snapshots are written under `.local/state/changes/collections/<timestamp>/`.
-- Output can be rendered as Markdown or JSON for inspection and downstream processing.
-- Invoke it with `go run -tags devtools ./cmd/changes collect --catalog .local/state/catalog.toml`.
-- Or use the repo-local wrapper: `./scripts/collect-changelogs --catalog .local/state/catalog.toml`.
-- To turn a collected snapshot into fragment files in ignored state storage, run `go run -tags devtools ./cmd/changes collect drafts --input .local/state/changes/catalog-check.json`.
-- The extractor attempts to split each upstream changelog into release/version sections and write one fragment per extracted section.
-- Extracted fragments are written per product under `.local/state/collect-changes/<product>/changes/fragments/`.
-- Those `collect-changes` workspaces may also contain sibling `changes/releases/` and `changes/templates/` directories, but they are separate from the canonical `.local/share/changes/*` tree.
-- Imported collection output must not be copied into `.local/share/changes/fragments`.
-
-Example catalog:
-
-```toml
-[[sources]]
-name = "Go"
-url = "https://go.dev/doc/devel/release"
-format = "html"
-
-[[sources]]
-name = "Node.js"
-url = "https://raw.githubusercontent.com/nodejs/node/main/doc/changelogs/CHANGELOG_V22.md"
-format = "markdown"
-```
+- [Semantic Versioning](https://semver.org/) for the baseline versioning contract most ecosystems start from.
+- [Dart package versioning](https://dart.dev/tools/pub/versioning) for a concrete explanation of constraint solving, lockfiles, exported dependencies, and why dependency compatibility is broader than a package's own direct API.
+- [Dart language versioning](https://dart.dev/language/versioning) for an example of language-level breaking changes that are managed outside ordinary package SemVer.
+- [Swift PackageDescription](https://docs.swift.org/package-manager/PackageDescription/PackageDescription.html) for `swift-tools-version`, platform support, and package-level compatibility declarations.
+- [Library Evolution in Swift](https://www.swift.org/blog/library-evolution/) for source and binary compatibility tradeoffs, including why additive API changes such as enum cases can still be breaking in some client contexts.
+- [PubGrub incompatibilities](https://pubgrub-rs-guide.netlify.app/internals/incompatibilities) for the underlying conflict model behind modern dependency solving.
+- [Dependency Resolution Made Simple](https://borretti.me/article/dependency-resolution-made-simple) for a practical explanation of why version constraints and selected versions are different things.
+- [Categorizing Package Manager Clients](https://nesbitt.io/2025/12/29/categorizing-package-manager-clients.html) and [Dependency Resolution Methods](https://nesbitt.io/2026/02/06/dependency-resolution-methods.html) for a cross-ecosystem view of solver behavior, nesting, mediation, and why runtime compatibility depends on more than SemVer labels alone.
 
 ## Development
 

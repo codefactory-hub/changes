@@ -22,15 +22,14 @@ import (
 )
 
 type App struct {
-	Stdout     io.Writer
-	Stderr     io.Writer
-	Stdin      io.Reader
-	Now        func() time.Time
-	Random     io.Reader
-	HTTPClient any
-	IsTTY      func() bool
-	EditFile   func(path string) error
-	promptIn   io.Reader
+	Stdout   io.Writer
+	Stderr   io.Writer
+	Stdin    io.Reader
+	Now      func() time.Time
+	Random   io.Reader
+	IsTTY    func() bool
+	EditFile func(path string) error
+	promptIn io.Reader
 }
 
 func NewApp(stdout, stderr io.Writer) *App {
@@ -58,14 +57,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	handled, err := a.runOptionalCommand(ctx, args)
-	if err != nil {
-		return a.fail(err)
-	}
-	if handled {
-		return nil
-	}
-
+	var err error
 	switch args[0] {
 	case "init":
 		err = a.runInit(ctx, args[1:])
