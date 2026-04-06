@@ -9,6 +9,17 @@ This repository is set up to publish tagged releases through GoReleaser and then
 3. GoReleaser builds the `changes` binary for Linux, macOS, and Windows.
 4. GoReleaser publishes a GitHub Release and updates the internal Homebrew cask tap.
 
+## GitHub dry run
+
+Use the `release-dry-run` workflow from the GitHub Actions UI when you want to validate the release path without publishing a release or updating the Homebrew tap.
+
+The dry run workflow:
+
+- prepares release notes with `./scripts/prepare-release-notes.sh`
+- validates `.goreleaser.yaml` with `./scripts/verify-release-config.sh`
+- runs `./scripts/build-release-snapshot.sh`
+- uploads the generated release notes and snapshot build outputs as workflow artifacts
+
 ## Local verification
 
 Use these commands before pushing a release tag:
@@ -50,6 +61,8 @@ The workflow currently runs:
 ```
 
 If the repo has not been initialized for `changes` yet, or if it still has no final release record to render, the script writes a placeholder file so release automation stays coherent during bootstrap.
+
+The dry-run workflow uses the same release-notes preparation path.
 
 ## Tap model
 

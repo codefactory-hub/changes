@@ -215,3 +215,5 @@ go test ./...
 ## Release automation
 
 Release automation is wired through GoReleaser and a private/internal Homebrew cask tap. Use `./scripts/prepare-release-notes.sh`, `./scripts/verify-release-config.sh`, and `./scripts/build-release-snapshot.sh` for local release verification, and see [docs/releasing/RELEASING.md](docs/releasing/RELEASING.md) for required variables, secrets, and the full publish flow.
+
+For CI rehearsal without publishing, use the `release-dry-run` GitHub Actions workflow.

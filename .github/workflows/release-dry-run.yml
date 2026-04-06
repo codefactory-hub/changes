@@ -1,0 +1,68 @@
+name: release-dry-run
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  release-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Prepare release notes
+        shell: bash
+        run: ./scripts/prepare-release-notes.sh "dry-run"
+
+      - name: Verify GoReleaser config
+        shell: bash
+        run: ./scripts/verify-release-config.sh
+        env:
+          CHANGES_GITHUB_OWNER: ${{ vars.CHANGES_GITHUB_OWNER }}
+          CHANGES_GITHUB_REPO: ${{ vars.CHANGES_GITHUB_REPO }}
+          CHANGES_PROJECT_HOMEPAGE: ${{ vars.CHANGES_PROJECT_HOMEPAGE }}
+          CHANGES_HOMEBREW_TAP_OWNER: ${{ vars.CHANGES_HOMEBREW_TAP_OWNER }}
+          CHANGES_HOMEBREW_TAP_REPO: ${{ vars.CHANGES_HOMEBREW_TAP_REPO }}
+          CHANGES_HOMEBREW_TAP_BRANCH: ${{ vars.CHANGES_HOMEBREW_TAP_BRANCH }}
+          CHANGES_HOMEBREW_TAP_TOKEN: ${{ secrets.CHANGES_HOMEBREW_TAP_TOKEN }}
+          CHANGES_RELEASE_BOT_NAME: ${{ vars.CHANGES_RELEASE_BOT_NAME }}
+          CHANGES_RELEASE_BOT_EMAIL: ${{ vars.CHANGES_RELEASE_BOT_EMAIL }}
+
+      - name: Build release snapshot
+        shell: bash
+        run: ./scripts/build-release-snapshot.sh
+        env:
+          CHANGES_GITHUB_OWNER: ${{ vars.CHANGES_GITHUB_OWNER }}
+          CHANGES_GITHUB_REPO: ${{ vars.CHANGES_GITHUB_REPO }}
+          CHANGES_PROJECT_HOMEPAGE: ${{ vars.CHANGES_PROJECT_HOMEPAGE }}
+          CHANGES_HOMEBREW_TAP_OWNER: ${{ vars.CHANGES_HOMEBREW_TAP_OWNER }}
+          CHANGES_HOMEBREW_TAP_REPO: ${{ vars.CHANGES_HOMEBREW_TAP_REPO }}
+          CHANGES_HOMEBREW_TAP_BRANCH: ${{ vars.CHANGES_HOMEBREW_TAP_BRANCH }}
+          CHANGES_HOMEBREW_TAP_TOKEN: ${{ secrets.CHANGES_HOMEBREW_TAP_TOKEN }}
+          CHANGES_RELEASE_BOT_NAME: ${{ vars.CHANGES_RELEASE_BOT_NAME }}
+          CHANGES_RELEASE_BOT_EMAIL: ${{ vars.CHANGES_RELEASE_BOT_EMAIL }}
+
+      - name: Upload release notes artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes-dry-run
+          path: .dist/release-notes.md
+          if-no-files-found: error
+
+      - name: Upload GoReleaser snapshot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: goreleaser-snapshot
+          path: dist/**
+          if-no-files-found: error
