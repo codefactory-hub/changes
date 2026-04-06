@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 1: Layout Proposal review
+**Current focus:** Phase 1: Layout Proposal context captured
 
 ## Current Position
 
 Phase: 1 of 5 (Layout Proposal)
-Plan: 1 of 2 in current phase
-Status: Planning
-Last activity: 2026-04-06 — Locked approved layout model into planning docs and proposal artifact
+Plan: 2 of 2 in current phase
+Status: Ready to plan
+Last activity: 2026-04-06 — Phase 1 context gathered and locked into 01-CONTEXT.md
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -40,8 +40,8 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- Initialization should stay discussion-first until the layout proposal and command shape are reviewed
 - The layout system must keep a single authoritative write target and fail loudly on ambiguity
+- Legacy layouts are detectable, but only manifest-backed layouts are valid for normal operation
 
 ### Pending Todos
 
@@ -49,10 +49,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- Implementation is blocked until the locked proposal is the reference for Phase 2 work
+- Phase 1 discussion is complete; next step is planning against the locked proposal and captured context
 
 ## Session Continuity
 
-Last session: 2026-04-06 12:00
-Stopped at: Wrote and locked the design proposal for flexible global and repo-local layout resolution
-Resume file: None
+Last session: 2026-04-06 13:47
+Stopped at: Phase 1 context gathered
+Resume file: .planning/phases/01-layout-proposal/01-CONTEXT.md
