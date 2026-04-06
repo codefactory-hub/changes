@@ -53,7 +53,6 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Random = bytes.NewReader([]byte{0, 1, 2, 3})
 	if err := app.Run(context.Background(), []string{
 		"create",
-		"patch",
 		"--behavior", "fix",
 		"--type", "fixed",
 		"--scope", "release",
@@ -122,7 +121,6 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Random = bytes.NewReader([]byte{8, 9, 10, 11})
 	if err := app.Run(context.Background(), []string{
 		"create",
-		"minor",
 		"--public-api", "add",
 		"--type", "added",
 		"Add tester profile.\n\nIntroduce concise tester rendering.",
@@ -263,7 +261,6 @@ func TestAppResolveEmitsReleaseBundleJSON(t *testing.T) {
 	}
 	if err := app.Run(context.Background(), []string{
 		"create",
-		"minor",
 		"--public-api", "add",
 		"--type", "added",
 		"--section-key", "highlights",
@@ -380,7 +377,6 @@ func TestStatusExplainShowsPolicyEvidence(t *testing.T) {
 	}
 	if err := app.Run(context.Background(), []string{
 		"create",
-		"minor",
 		"--public-api", "change",
 		"Shift the parser API to a new shape.",
 	}); err != nil {
@@ -400,7 +396,7 @@ func TestStatusExplainShowsPolicyEvidence(t *testing.T) {
 	if !strings.Contains(body, "Public API policy: unstable") {
 		t.Fatalf("missing configured public API policy:\n%s", body)
 	}
-	if !strings.Contains(body, "Policy-suggested bump: minor") {
+	if !strings.Contains(body, "Recommended bump: minor") {
 		t.Fatalf("missing suggested bump:\n%s", body)
 	}
 	if !strings.Contains(body, "public_api=change implies minor while public API policy is unstable") {
@@ -530,7 +526,6 @@ func TestInitCurrentVersionCreatesAdoptionBootstrap(t *testing.T) {
 	}
 	if err := app.Run(context.Background(), []string{
 		"create",
-		"patch",
 		"--behavior", "fix",
 		"Fix the first post-adoption bug.",
 	}); err != nil {
@@ -663,7 +658,6 @@ func TestReleaseRequiresDecisionOutsideTTY(t *testing.T) {
 	}
 	if err := app.Run(context.Background(), []string{
 		"create",
-		"patch",
 		"--behavior", "fix",
 		"Fix the parser edge case.",
 	}); err != nil {
@@ -675,6 +669,48 @@ func TestReleaseRequiresDecisionOutsideTTY(t *testing.T) {
 		t.Fatalf("release should require an explicit decision outside TTY")
 	}
 	if !strings.Contains(stderr.String(), "non-interactive use requires --yes, --bump, or --version") {
+		t.Fatalf("unexpected stderr:\n%s", stderr.String())
+	}
+}
+
+func TestReleaseRequiresExplicitBumpWhenNoImpactIsInferred(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 10, 30, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{5, 4, 3})
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+	if err := app.Run(context.Background(), []string{"create", "Document an internal refactor."}); err != nil {
+		t.Fatalf("create returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"status", "--explain"}); err != nil {
+		t.Fatalf("status --explain returned error: %v", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "Recommended bump: none") || !strings.Contains(got, "no semantic levers present; no release impact was inferred") {
+		t.Fatalf("unexpected status output:\n%s", got)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err := app.Run(context.Background(), []string{"release", "--yes"})
+	if err == nil {
+		t.Fatalf("release --yes should fail when no bump is inferred")
+	}
+	if !strings.Contains(stderr.String(), "no version bump was inferred; pass --bump or --version") {
 		t.Fatalf("unexpected stderr:\n%s", stderr.String())
 	}
 }
@@ -699,7 +735,6 @@ func TestReleasePromptsInTTYAndAllowsOverride(t *testing.T) {
 	}
 	if err := app.Run(context.Background(), []string{
 		"create",
-		"patch",
 		"--behavior", "fix",
 		"Fix the first parser bug.",
 	}); err != nil {
@@ -714,7 +749,6 @@ func TestReleasePromptsInTTYAndAllowsOverride(t *testing.T) {
 	}
 	if err := app.Run(context.Background(), []string{
 		"create",
-		"patch",
 		"--behavior", "fix",
 		"Fix the second parser bug.",
 	}); err != nil {
@@ -764,7 +798,6 @@ func TestReleasePromptCanCancel(t *testing.T) {
 	}
 	if err := app.Run(context.Background(), []string{
 		"create",
-		"patch",
 		"--behavior", "fix",
 		"Fix the cancel test bug.",
 	}); err != nil {
@@ -796,7 +829,7 @@ func TestCreateRequiresExplicitBodyOutsideTTY(t *testing.T) {
 		t.Fatalf("init returned error: %v", err)
 	}
 
-	err := app.Run(context.Background(), []string{"create", "minor"})
+	err := app.Run(context.Background(), []string{"create"})
 	if err == nil {
 		t.Fatalf("create without body should fail outside TTY")
 	}
@@ -806,7 +839,7 @@ func TestCreateRequiresExplicitBodyOutsideTTY(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	err = app.Run(context.Background(), []string{"create", "minor", "--public-api", "oops", "body"})
+	err = app.Run(context.Background(), []string{"create", "--public-api", "oops", "body"})
 	if err == nil {
 		t.Fatalf("create with invalid public-api should fail")
 	}
@@ -838,7 +871,7 @@ func TestCreatePromptsForMissingFieldsInTTY(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	app.Stdin = strings.NewReader("did-something-cool\nThe whirly-gig no longer breaks on Thursdays.\n")
-	if err := app.Run(context.Background(), []string{"create", "minor"}); err != nil {
+	if err := app.Run(context.Background(), []string{"create"}); err != nil {
 		t.Fatalf("interactive create returned error: %v\nstderr=%s", err, stderr.String())
 	}
 
@@ -877,7 +910,7 @@ func TestCreateEditUsesScaffoldedFrontMatter(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !strings.Contains(string(raw), `bump = "minor"`) || !strings.Contains(string(raw), `# public_api = "add|change|remove"`) {
+		if !strings.Contains(string(raw), `# public_api = "add|change|remove"`) {
 			t.Fatalf("scaffold missing expected front matter:\n%s", raw)
 		}
 		edited := strings.TrimSpace(string(raw)) + "\n\nAdd the whirly-gig fix.\n\nIt now behaves on Thursdays.\n"
@@ -891,7 +924,7 @@ func TestCreateEditUsesScaffoldedFrontMatter(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	app.Stdin = strings.NewReader("did-something-cool\n")
-	if err := app.Run(context.Background(), []string{"create", "minor", "--edit"}); err != nil {
+	if err := app.Run(context.Background(), []string{"create", "--edit"}); err != nil {
 		t.Fatalf("create --edit returned error: %v\nstderr=%s", err, stderr.String())
 	}
 

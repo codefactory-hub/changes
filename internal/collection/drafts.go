@@ -36,7 +36,6 @@ type extractedSection struct {
 	Title    string
 	Body     string
 	Type     string
-	Bump     string
 	Breaking bool
 }
 
@@ -138,7 +137,6 @@ func WriteDraftBatch(repoRoot string, cfg config.Config, inputPath string, resul
 					ID:        id,
 					CreatedAt: sectionCreatedAt,
 					Type:      section.Type,
-					Bump:      section.Bump,
 					Breaking:  section.Breaking,
 					Scopes:    []string{"collect-changes", productSlug, result.Source.ID},
 					Authors:   []string{"changes collect drafts"},
@@ -220,12 +218,11 @@ func extractSections(result Result) []extractedSection {
 		}
 		body := strings.Join(bodyLines, "\n")
 		title := limitTitle(fmt.Sprintf("%s %s", result.Source.Name, heading.Text))
-		sectionType, bump, breaking := classifySection(heading.Text, body)
+		sectionType, breaking := classifySection(heading.Text, body)
 		sections = append(sections, extractedSection{
 			Title:    title,
 			Body:     body,
 			Type:     sectionType,
-			Bump:     bump,
 			Breaking: breaking,
 		})
 	}
@@ -267,12 +264,11 @@ func fallbackSection(result Result) extractedSection {
 	if body == "" {
 		body = fmt.Sprintf("Source URL: %s", result.Source.URL)
 	}
-	sectionType, bump, breaking := classifySection(result.Source.Name, body)
+	sectionType, breaking := classifySection(result.Source.Name, body)
 	return extractedSection{
 		Title:    limitTitle(result.Source.Name),
 		Body:     body,
 		Type:     sectionType,
-		Bump:     bump,
 		Breaking: breaking,
 	}
 }
@@ -374,12 +370,11 @@ func extractStructuredReleaseDocument(result Result) (extractedReleaseDocument, 
 			return extractedReleaseDocument{}, false
 		}
 		body := strings.Join(bodyLines, "\n")
-		sectionType, bump, breaking := classifySection(heading, body)
+		sectionType, breaking := classifySection(heading, body)
 		sections = append(sections, extractedSection{
 			Title:    singleReleaseTitle(result.Source.Name, heading),
 			Body:     body,
 			Type:     sectionType,
-			Bump:     bump,
 			Breaking: breaking,
 		})
 	} else {
@@ -393,12 +388,11 @@ func extractStructuredReleaseDocument(result Result) (extractedReleaseDocument, 
 				continue
 			}
 			body := strings.Join(bodyLines, "\n")
-			sectionType, bump, breaking := classifySection(item.Text, body)
+			sectionType, breaking := classifySection(item.Text, body)
 			sections = append(sections, extractedSection{
 				Title:    limitTitle(item.Text),
 				Body:     body,
 				Type:     sectionType,
-				Bump:     bump,
 				Breaking: breaking,
 			})
 		}
@@ -518,22 +512,22 @@ func trimEmptyLines(lines []string) []string {
 	return slices.Clone(lines[start:end])
 }
 
-func classifySection(title, body string) (string, string, bool) {
+func classifySection(title, body string) (string, bool) {
 	text := strings.ToLower(title + "\n" + body)
 	breaking := strings.Contains(text, "breaking")
 	switch {
 	case breaking:
-		return "changed", "major", true
+		return "changed", true
 	case strings.Contains(text, "**feat**") || strings.Contains(text, " feat") || strings.Contains(text, "feature") || strings.Contains(text, "added"):
-		return "added", "minor", false
+		return "added", false
 	case strings.Contains(text, "**fix**") || strings.Contains(text, "bug fix") || strings.Contains(text, "fixed"):
-		return "fixed", "patch", false
+		return "fixed", false
 	case strings.Contains(text, "security"):
-		return "security", "patch", false
+		return "security", false
 	case strings.Contains(text, "removed") || strings.Contains(text, "deprecat"):
-		return "removed", "minor", false
+		return "removed", false
 	default:
-		return "changed", "patch", false
+		return "changed", false
 	}
 }
 

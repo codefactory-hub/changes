@@ -46,7 +46,7 @@ func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 		AddedFragmentIDs: []string{"f1"},
 	}
 	allFragments := []fragments.Fragment{
-		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC), Type: "fixed", Bump: "patch"}, Body: "first body"},
+		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC), Type: "fixed"}, Body: "first body"},
 	}
 	bundle, err := releases.AssembleRelease(record, []releases.ReleaseRecord{record}, allFragments)
 	if err != nil {
@@ -123,11 +123,11 @@ func TestRenderChainDropsWholeReleaseBlocks(t *testing.T) {
 		Bundles: []releases.ReleaseBundle{
 			{
 				Release:  releases.ReleaseRecord{Product: "changes", Version: "0.2.0"},
-				Sections: []releases.BundleSection{{Key: "fixed", Title: "Fixed", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f1", Type: "fixed", Bump: "patch", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "short"}}}}},
+				Sections: []releases.BundleSection{{Key: "fixed", Title: "Fixed", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f1", Type: "fixed", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "short"}}}}},
 			},
 			{
 				Release:  releases.ReleaseRecord{Product: "changes", Version: "0.1.0"},
-				Sections: []releases.BundleSection{{Key: "added", Title: "Added", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f2", Type: "added", Bump: "minor", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "long body to trigger omission over the profile max chars threshold"}}}}},
+				Sections: []releases.BundleSection{{Key: "added", Title: "Added", Entries: []releases.BundleEntry{{Fragment: fragments.Fragment{Metadata: fragments.Metadata{ID: "f2", Type: "added", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC)}, Body: "long body to trigger omission over the profile max chars threshold"}}}}},
 			},
 		},
 	}

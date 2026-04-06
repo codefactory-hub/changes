@@ -8,7 +8,6 @@ Default fragment shape:
 
 ```md
 +++
-bump = "minor"
 public_api = "add"
 behavior = "new"
 +++
@@ -36,8 +35,8 @@ The tool always resolves the target repository root from Git. If a command runs 
 
 ```text
 changes init [--current-version <semver|unreleased>]
-changes create patch --behavior fix "Fix release note rendering."
-changes create minor --edit
+changes create --behavior fix "Fix release note rendering."
+changes create --public-api add --edit
 changes status
 changes status --explain
 changes release
@@ -56,12 +55,14 @@ Interactive authoring prompts for optional `name` stem and body text when you ru
 `changes init` can also bootstrap an already-released product:
 
 - `changes init --current-version unreleased` starts a new repository with no adoption release record
+- `changes init --current-version 0.0.0` is treated the same as `unreleased`
 - `changes init --current-version 2.7.4` creates a standard adoption release and fragment at `2.7.4`
 - init always generates `.local/share/changes/prompts/release-history-import-llm-prompt.md` as a repo-specific starting point for an LLM-assisted historical import workflow
+- rerunning `init` after bootstrap adoption artifacts already exist fails and asks you to review or remove them intentionally
 
 ## Fragment vocabulary
 
-Fragments still carry an explicit `bump` because the current release suggestion layer consumes `patch|minor|major` directly. The newer semantic levers exist to explain why that bump was chosen and to make future automation more defensible.
+Fragments describe change facts. They do not carry an explicit `patch|minor|major` bump. `changes` derives release impact from these semantic levers together with the repository's `versioning.public_api` policy.
 
 Use these fragment keys when they help:
 
@@ -83,15 +84,17 @@ The intended meaning is:
 
 `type = "added|changed|fixed"` remains available as an optional render grouping for release-note sections. It is no longer the primary way the tool describes semver intent to developers.
 
-Today the declared `bump` remains visible as evidence, but the tool also evaluates the semantic levers through an advisory policy layer. Inspect that evidence with `changes status --explain`. In a TTY, `changes release` shows the same evidence, proposes a default release version, and lets a human accept it with Enter or override it with `patch`, `minor`, or `major`.
+Inspect the derived impact evidence with `changes status --explain`. In a TTY, `changes release` shows the same evidence, proposes a default release version when one can be inferred, and lets a human accept it with Enter or override it with `patch`, `minor`, or `major`. If no version bump is inferred from the fragment levers, `release` requires an explicit human choice.
 
 ## Model
 
 - Fragments are durable source records. They are not deleted when a release happens.
 - Release records are canonical per-release files stored under `.local/share/changes/releases/`.
+- Prompt files under `.local/share/changes/prompts/` are repo-specific helper artifacts, not canonical release history.
 - Every release identity requires one base `ReleaseRecord` named `<product>-<version>.toml`.
 - Optional companion `ReleaseRecord`s use SemVer build metadata, such as `<product>-1.2.3+docs.1.toml`, for additional canonical records tied to the exact same release.
 - Base release records carry lineage, fragment selection, and release-wide structure such as sections and display fields.
+- Init can create a standard bootstrap adoption release and fragment for an already-released product. Those artifacts are ordinary renderable history and establish the current-version baseline for later `status` and `release` calculations.
 - `ReleaseBundle` is the assembled factual data for one release: base record, companion records, lineage context, selected fragments, and ordered sections.
 - Final releases form the canonical parent-linked lineage used for changelog rebuilds.
 - Prereleases are ordinary SemVer prereleases such as `alpha`, `beta`, `rc`, or any other valid label.
@@ -102,17 +105,33 @@ Today the declared `bump` remains visible as evidence, but the tool also evaluat
 
 ## Versioning policy
 
-- If no stable release exists, `project.initial_version` is the first stable baseline.
-- Unreleased fragments not reachable from the latest stable head determine the highest declared bump.
+- The latest final base release record is the current version baseline when one exists.
+- If no final base release record exists, `project.initial_version` remains the deterministic first stable baseline.
+- Unreleased fragments not reachable from the latest final head determine the recommended bump through semantic levers plus `versioning.public_api`.
 - Prerelease suggestion targets the next final version and increments the prerelease number within the same target version and label.
 - Prerelease labels are explicit per release command, such as `changes release --pre beta`; there is no configured default label.
+
+Repositories that adopt `changes` mid-lifecycle usually move onto an explicit release-record baseline immediately through `changes init --current-version <semver>`. Brand-new repositories that initialize with `unreleased` continue to rely on `project.initial_version` until their first final release record exists.
 
 Configure the public API policy in `.config/changes/config.toml`:
 
 ```toml
+[project]
+initial_version = "0.1.0"
+
 [versioning]
 public_api = "unstable"
 ```
+
+`project.initial_version` is a deterministic fallback baseline, not an always-updated current-version field.
+
+## Historical Import Prompt
+
+`changes init` always generates `.local/share/changes/prompts/release-history-import-llm-prompt.md`.
+
+- The prompt explains the repository's `changes` layout and current bootstrap state.
+- For adopted repositories, it explains that the standard adoption release and fragment may be replaced or refined intentionally.
+- The CLI never invokes an LLM directly. The prompt is a human-reviewed starting point for reconstructing older history from changelogs, git history, tags, or other repo-specific evidence.
 
 The semantic levers above typically imply bumps like this:
 
@@ -127,7 +146,7 @@ The semantic levers above typically imply bumps like this:
 - `runtime = "reduce"`: usually `major`
 - `runtime = "expand"`: usually `minor`
 
-When a fragment carries multiple levers, the highest-severity implication should win. A `fix` combined with a `restrict`, for example, should still be treated as a likely `major`.
+When a fragment carries multiple levers, the highest-severity implication should win. A `fix` combined with a `restrict`, for example, should still be treated as a likely `major`. If a fragment carries none of these levers, the tool infers no version bump from that fragment alone.
 
 The current policy layer distinguishes between stable and unstable public APIs through `versioning.public_api`:
 
@@ -136,7 +155,7 @@ The current policy layer distinguishes between stable and unstable public APIs t
 - additive levers such as `public_api = "add"`, `behavior = "new"`, `dependency = "relax"`, and `runtime = "expand"` still suggest `minor`
 - `behavior = "fix"` still suggests `patch`
 
-That policy is advisory for now. `changes status --explain` and interactive `changes release` show both the highest declared bump and the policy-suggested bump. `changes release --yes` accepts the default recommendation, while `changes release --bump <patch|minor|major>` or `changes release --version <exact>` lets the operator choose explicitly.
+That policy drives the tool's recommendation. `changes status --explain` and interactive `changes release` show the recommended bump and the evidence behind it. `changes release --yes` accepts the default recommendation when one exists, while `changes release --bump <patch|minor|major>` or `changes release --version <exact>` lets the operator choose explicitly.
 
 ## Rendering
 

@@ -9,7 +9,7 @@ import (
 
 func TestEvaluateUsesStablePolicyAtMajorOneAndAbove(t *testing.T) {
 	pending := []fragments.Fragment{
-		{Metadata: fragments.Metadata{ID: "f1", Bump: "patch", PublicAPI: "change"}},
+		{Metadata: fragments.Metadata{ID: "f1", PublicAPI: "change"}},
 	}
 
 	got := Evaluate(StabilityStable, pending)
@@ -24,7 +24,7 @@ func TestEvaluateUsesStablePolicyAtMajorOneAndAbove(t *testing.T) {
 
 func TestEvaluateUsesUnstablePolicyBeforeMajorOne(t *testing.T) {
 	pending := []fragments.Fragment{
-		{Metadata: fragments.Metadata{ID: "f1", Bump: "patch", PublicAPI: "change"}},
+		{Metadata: fragments.Metadata{ID: "f1", PublicAPI: "change"}},
 	}
 
 	got := Evaluate(StabilityUnstable, pending)
@@ -37,15 +37,15 @@ func TestEvaluateUsesUnstablePolicyBeforeMajorOne(t *testing.T) {
 	}
 }
 
-func TestEvaluateFallsBackToDeclaredBumpWithoutSemanticLevers(t *testing.T) {
+func TestEvaluateInfersNoBumpWithoutSemanticLevers(t *testing.T) {
 	pending := []fragments.Fragment{
-		{Metadata: fragments.Metadata{ID: "f1", Bump: "patch"}},
+		{Metadata: fragments.Metadata{ID: "f1"}},
 	}
 
 	got := Evaluate(StabilityStable, pending)
 
-	if got.SuggestedBump != versioning.BumpPatch {
-		t.Fatalf("suggested bump = %q, want %q", got.SuggestedBump, versioning.BumpPatch)
+	if got.SuggestedBump != versioning.BumpNone {
+		t.Fatalf("suggested bump = %q, want %q", got.SuggestedBump, versioning.BumpNone)
 	}
 	if len(got.Assessments) != 1 || len(got.Assessments[0].Reasons) == 0 {
 		t.Fatalf("expected fallback reason, got %#v", got.Assessments)

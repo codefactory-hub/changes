@@ -13,7 +13,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/example/changes/internal/config"
-	"github.com/example/changes/internal/versioning"
 )
 
 var (
@@ -36,7 +35,6 @@ type Metadata struct {
 	CreatedAt            time.Time `toml:"created_at"`
 	Title                string    `toml:"title"`
 	Type                 string    `toml:"type"`
-	Bump                 string    `toml:"bump"`
 	Bootstrap            bool      `toml:"bootstrap"`
 	PublicAPI            string    `toml:"public_api"`
 	Behavior             string    `toml:"behavior"`
@@ -65,7 +63,6 @@ type Fragment struct {
 type NewInput struct {
 	NameStem             string
 	Type                 string
-	Bump                 versioning.Bump
 	Bootstrap            bool
 	PublicAPI            string
 	Behavior             string
@@ -95,7 +92,6 @@ func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader,
 		Metadata: Metadata{
 			CreatedAt:            now.UTC().Truncate(time.Second),
 			Type:                 normalizeType(input.Type),
-			Bump:                 string(input.Bump),
 			Bootstrap:            input.Bootstrap,
 			PublicAPI:            normalizePublicAPI(input.PublicAPI),
 			Behavior:             normalizeBehavior(input.Behavior),
@@ -266,9 +262,6 @@ func (f Fragment) Validate() error {
 	if f.DisplayOrder < 0 {
 		return fmt.Errorf("fragment display_order must be >= 0")
 	}
-	if _, err := versioning.NormalizeBump(f.Bump); err != nil {
-		return err
-	}
 	if err := validateEnum("public_api", f.PublicAPI, "add", "change", "remove"); err != nil {
 		return err
 	}
@@ -290,7 +283,6 @@ func (f Fragment) Format() string {
 
 	var metadata struct {
 		Type                 string   `toml:"type"`
-		Bump                 string   `toml:"bump"`
 		Bootstrap            bool     `toml:"bootstrap,omitempty"`
 		PublicAPI            string   `toml:"public_api,omitempty"`
 		Behavior             string   `toml:"behavior,omitempty"`
@@ -310,7 +302,6 @@ func (f Fragment) Format() string {
 		DisplayOrder         int      `toml:"display_order,omitempty"`
 	}
 	metadata.Type = normalizeType(f.Type)
-	metadata.Bump = strings.TrimSpace(f.Bump)
 	metadata.Bootstrap = f.Bootstrap
 	metadata.PublicAPI = normalizePublicAPI(f.PublicAPI)
 	metadata.Behavior = normalizeBehavior(f.Behavior)

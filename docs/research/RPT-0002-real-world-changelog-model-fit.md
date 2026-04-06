@@ -4,6 +4,8 @@
 
 Date: 2026-04-03
 
+This is a historical research record. Exploratory field names and model vocabulary in this document may reflect earlier iterations of `changes` rather than the current fragment and release-record schema.
+
 This note summarizes what the recent real-world changelog ingestion experiments imply about the current `changes` model.
 
 During this exploration, a large set of ignored-state collection, extraction, reconstruction, and comparison artifacts were generated for many products and libraries. The main temporary artifact types included:

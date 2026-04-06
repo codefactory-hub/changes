@@ -1,5 +1,7 @@
 # PLN-0001 Bootstrap Changes
 
+Historical planning record. The command names and scope below reflect the plan at the time it was written, not the current CLI surface.
+
 ## Scope
 
 Ship the first sound layer of `changes` as a Go CLI that can operate inside any Git repository with repo-local configuration, durable fragments, release records, deterministic version suggestion, template-based rendering, and changelog rebuilds.

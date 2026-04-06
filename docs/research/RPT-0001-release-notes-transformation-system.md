@@ -3,6 +3,8 @@
 
 ## Research note
 
+This is a historical research record. Example commands, interfaces, and exploratory vocabulary in this document may reflect earlier stages of the CLI rather than the current command surface.
+
 This revision now incorporates the user-supplied raw text and HTML of Anna Pickard’s original Slack article directly. That removes the earlier uncertainty: the Slack-specific principles in this memo are grounded in the article itself, not just later retrospectives or second-hand summaries.
 
 The most important additions from the article are architectural, not merely stylistic:

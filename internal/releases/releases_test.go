@@ -12,9 +12,9 @@ import (
 
 func TestFinalAndPrereleaseSelectionUsesLineage(t *testing.T) {
 	all := []fragments.Fragment{
-		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC), Title: "One", Bump: "patch"}, Body: "body one"},
-		{Metadata: fragments.Metadata{ID: "f2", CreatedAt: time.Date(2026, 4, 2, 16, 0, 0, 0, time.UTC), Title: "Two", Bump: "minor"}, Body: "body two"},
-		{Metadata: fragments.Metadata{ID: "f3", CreatedAt: time.Date(2026, 4, 2, 17, 0, 0, 0, time.UTC), Title: "Three", Bump: "patch"}, Body: "body three"},
+		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC), Title: "One"}, Body: "body one"},
+		{Metadata: fragments.Metadata{ID: "f2", CreatedAt: time.Date(2026, 4, 2, 16, 0, 0, 0, time.UTC), Title: "Two"}, Body: "body two"},
+		{Metadata: fragments.Metadata{ID: "f3", CreatedAt: time.Date(2026, 4, 2, 17, 0, 0, 0, time.UTC), Title: "Three"}, Body: "body three"},
 	}
 
 	records := []ReleaseRecord{

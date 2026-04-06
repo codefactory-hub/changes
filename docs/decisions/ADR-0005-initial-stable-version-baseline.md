@@ -6,18 +6,23 @@ Accepted
 
 ## Context
 
-Version recommendation needs a deterministic stable baseline even before the repository has published its first stable release through `changes`.
+Version recommendation needs a deterministic stable baseline even before the repository has published its first final release through `changes`.
 
-Inventing a synthetic earlier release would complicate the first layer and blur the distinction between explicit release history and inferred history.
+Some repositories adopt `changes` after they already have a released version. Those repositories need an explicit bootstrap path so the current version becomes part of the release-record lineage instead of living forever as ad hoc config state.
+
+At the same time, brand-new repositories still need a deterministic fallback baseline before any final release record exists.
 
 ## Decision
 
-If the repository has no stable base release records, treat `project.initial_version` as the first stable baseline.
+- If a repository adopts `changes` at an already released version, `changes init --current-version <semver>` creates an explicit bootstrap adoption release record at that version.
+- Once any final base release record exists, including a bootstrap adoption release, use the latest final base release record as the current-version baseline.
+- If the repository has no final base release records, treat `project.initial_version` as the deterministic first stable baseline.
 
-After the first stable release exists, compute future stable targets by applying the highest unreleased bump to the latest stable version in the stable lineage.
+After a final base release exists, compute future stable targets by applying the policy-derived recommended bump to the latest final version in the final lineage.
 
 ## Consequences
 
-- first-release version recommendation is deterministic without synthetic history
-- the first layer stays simple and explicit
-- some advanced historical import and migration cases remain future work
+- new repositories still get deterministic first-release recommendation without synthetic history
+- adopted repositories can move onto explicit release-record history immediately
+- `project.initial_version` remains a fallback seed, not a perpetually current version field
+- richer historical reconstruction beyond the standard adoption bootstrap remains future work

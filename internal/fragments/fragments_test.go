@@ -41,7 +41,6 @@ func TestFormatParseRoundTrip(t *testing.T) {
 			ID:                   "amber-beacon-carries",
 			CreatedAt:            time.Date(2026, 4, 2, 15, 30, 45, 0, time.UTC),
 			Type:                 "fixed",
-			Bump:                 "patch",
 			PublicAPI:            "change",
 			Behavior:             "fix",
 			Dependency:           "refresh",

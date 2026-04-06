@@ -238,7 +238,6 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	highest := highestPendingBump(unreleased)
 	nextStable, err := recommendedStableVersion(cfg, records, product, unreleased)
 	if err != nil {
 		return err
@@ -249,7 +248,7 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	}
 
 	_, _ = fmt.Fprintf(a.Stdout, "Unreleased fragments: %d\n", len(unreleased))
-	_, _ = fmt.Fprintf(a.Stdout, "Highest declared bump: %s\n", highest)
+	_, _ = fmt.Fprintf(a.Stdout, "Recommended bump: %s\n", policy.SuggestedBump)
 	_, _ = fmt.Fprintf(a.Stdout, "Recommended next stable: %s\n", nextStable.String())
 	if explain {
 		renderRecommendationExplanation(a.Stdout, policy)
@@ -266,7 +265,7 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	if len(unreleased) > 0 {
 		_, _ = fmt.Fprintln(a.Stdout, "Pending fragments:")
 		for _, item := range unreleased {
-			_, _ = fmt.Fprintf(a.Stdout, "- %s [%s/%s] %s\n", item.ID, item.Type, item.Bump, item.BodyPreview())
+			_, _ = fmt.Fprintf(a.Stdout, "- %s [%s] %s\n", item.ID, item.Type, item.BodyPreview())
 		}
 	}
 
@@ -329,6 +328,9 @@ func (a *App) runRelease(ctx context.Context, args []string) error {
 	}
 	if !a.isTTY() && !yes && strings.TrimSpace(version) == "" && strings.TrimSpace(bump) == "" {
 		return fmt.Errorf("release: non-interactive use requires --yes, --bump, or --version")
+	}
+	if !a.isTTY() && yes && strings.TrimSpace(version) == "" && strings.TrimSpace(bump) == "" && releaseBump == versioning.BumpNone {
+		return fmt.Errorf("release: no version bump was inferred; pass --bump or --version")
 	}
 	if a.isTTY() && !yes && strings.TrimSpace(version) == "" {
 		releaseVersion, releaseBump, err = a.confirmReleaseSelection(releaseVersion, releaseBump, pre, unreleased, policy, cfg, records, product)
@@ -690,7 +692,7 @@ Initialize repo-local config, templates, changelog, prompts, and state directori
 	case "create":
 		body = strings.TrimSpace(`
 Usage:
-  changes create <patch|minor|major> [body] [--public-api <add|change|remove>] [--behavior <new|fix|redefine>] [--dependency <refresh|relax|restrict>] [--runtime <expand|reduce>] [--edit] [options]
+  changes create [body] [--public-api <add|change|remove>] [--behavior <new|fix|redefine>] [--dependency <refresh|relax|restrict>] [--runtime <expand|reduce>] [--edit] [options]
 
 Options:
   --body <text>                   Script-friendly body flag
@@ -718,7 +720,7 @@ Options:
 Usage:
   changes status [--explain]
 
-Show unreleased fragment counts, the highest pending bump, the recommended next stable version, and active prerelease heads.
+Show unreleased fragment counts, the policy-derived recommended bump, the recommended next stable version, and active prerelease heads.
 `)
 	case "release":
 		body = strings.TrimSpace(`
@@ -907,29 +909,16 @@ func selectRenderDocument(pack render.TemplatePack, head releases.ReleaseRecord,
 	}
 }
 
-func highestPendingBump(items []fragments.Fragment) versioning.Bump {
-	best := versioning.BumpNone
-	for _, item := range items {
-		bump, err := versioning.NormalizeBump(item.Bump)
-		if err != nil {
-			continue
-		}
-		best = versioning.HighestBump(best, bump)
-	}
-	return best
-}
-
 func renderRecommendationExplanation(w io.Writer, recommendation semverpolicy.Recommendation) {
 	_, _ = fmt.Fprintln(w, "Policy evidence:")
 	_, _ = fmt.Fprintf(w, "- Public API policy: %s\n", recommendation.Stability)
-	_, _ = fmt.Fprintf(w, "- Declared bump: %s\n", recommendation.DeclaredBump)
-	_, _ = fmt.Fprintf(w, "- Policy-suggested bump: %s\n", recommendation.SuggestedBump)
+	_, _ = fmt.Fprintf(w, "- Recommended bump: %s\n", recommendation.SuggestedBump)
 	if len(recommendation.Assessments) == 0 {
 		return
 	}
 	_, _ = fmt.Fprintln(w, "Fragment evidence:")
 	for _, item := range recommendation.Assessments {
-		_, _ = fmt.Fprintf(w, "- %s declared=%s policy=%s\n", item.FragmentID, item.DeclaredBump, item.SuggestedBump)
+		_, _ = fmt.Fprintf(w, "- %s => %s\n", item.FragmentID, item.SuggestedBump)
 		for _, reason := range item.Reasons {
 			_, _ = fmt.Fprintf(w, "  %s\n", reason)
 		}
@@ -962,6 +951,32 @@ func publicAPIStability(raw string) semverpolicy.Stability {
 func (a *App) confirmReleaseSelection(releaseVersion versioning.Version, releaseBump versioning.Bump, pre string, pending []fragments.Fragment, policy semverpolicy.Recommendation, cfg config.Config, records []releases.ReleaseRecord, product string) (versioning.Version, versioning.Bump, error) {
 	a.promptIn = nil
 	renderReleaseDecisionSummary(a.Stdout, pending, policy, releaseVersion)
+
+	if releaseBump == versioning.BumpNone {
+		answer, err := a.promptOptionalLine("No version bump was inferred. Choose patch/minor/major or type cancel: ")
+		if err != nil {
+			return versioning.Version{}, versioning.BumpNone, err
+		}
+		switch strings.TrimSpace(strings.ToLower(answer)) {
+		case "cancel":
+			return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release canceled")
+		case string(versioning.BumpPatch), string(versioning.BumpMinor), string(versioning.BumpMajor):
+			override, err := versioning.NormalizeBump(answer)
+			if err != nil {
+				return versioning.Version{}, versioning.BumpNone, err
+			}
+			target, err := nextStableForBump(cfg, records, product, override)
+			if err != nil {
+				return versioning.Version{}, versioning.BumpNone, err
+			}
+			if strings.TrimSpace(pre) != "" {
+				return recommendedPreviewVersion(records, product, target, pre), override, nil
+			}
+			return target, override, nil
+		default:
+			return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release: choose patch, minor, major, or cancel")
+		}
+	}
 
 	if strings.TrimSpace(pre) != "" {
 		answer, err := a.promptOptionalLine("Press Enter to accept, choose patch/minor/major for a different target, or type cancel: ")
@@ -1015,9 +1030,13 @@ func (a *App) confirmReleaseSelection(releaseVersion versioning.Version, release
 func renderReleaseDecisionSummary(w io.Writer, pending []fragments.Fragment, recommendation semverpolicy.Recommendation, releaseVersion versioning.Version) {
 	_, _ = fmt.Fprintf(w, "Pending fragments: %d\n", len(pending))
 	for _, item := range pending {
-		_, _ = fmt.Fprintf(w, "- %s [%s/%s] %s\n", item.ID, item.Type, item.Bump, item.BodyPreview())
+		_, _ = fmt.Fprintf(w, "- %s [%s] %s\n", item.ID, item.Type, item.BodyPreview())
 	}
 	renderRecommendationExplanation(w, recommendation)
+	if recommendation.SuggestedBump == versioning.BumpNone {
+		_, _ = fmt.Fprintln(w, "Default release: none inferred")
+		return
+	}
 	_, _ = fmt.Fprintf(w, "Default release: %s\n", releaseVersion.String())
 }
 
@@ -1111,7 +1130,6 @@ func (a *App) createAdoptionBootstrap(repoRoot string, cfg config.Config, curren
 	item, err := fragments.Create(repoRoot, cfg, a.Now(), a.Random, fragments.NewInput{
 		NameStem:  "changes-adoption",
 		Type:      "changed",
-		Bump:      versioning.BumpNone,
 		Bootstrap: true,
 		Body:      body,
 	})

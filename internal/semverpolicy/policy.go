@@ -17,43 +17,33 @@ const (
 
 type FragmentAssessment struct {
 	FragmentID    string
-	DeclaredBump  versioning.Bump
 	SuggestedBump versioning.Bump
 	Reasons       []string
 }
 
 type Recommendation struct {
 	Stability     Stability
-	DeclaredBump  versioning.Bump
 	SuggestedBump versioning.Bump
 	Assessments   []FragmentAssessment
 }
 
 func Evaluate(stability Stability, pending []fragments.Fragment) Recommendation {
 	out := Recommendation{
-		Stability:    stability,
-		DeclaredBump: versioning.BumpNone,
-		Assessments:  make([]FragmentAssessment, 0, len(pending)),
+		Stability:   stability,
+		Assessments: make([]FragmentAssessment, 0, len(pending)),
 	}
 
 	for _, item := range pending {
 		assessment := assessFragment(stability, item)
 		out.Assessments = append(out.Assessments, assessment)
-		out.DeclaredBump = versioning.HighestBump(out.DeclaredBump, assessment.DeclaredBump)
 		out.SuggestedBump = versioning.HighestBump(out.SuggestedBump, assessment.SuggestedBump)
 	}
 	return out
 }
 
 func assessFragment(stability Stability, item fragments.Fragment) FragmentAssessment {
-	declared, err := versioning.NormalizeBump(item.Bump)
-	if err != nil {
-		declared = versioning.BumpNone
-	}
-
 	out := FragmentAssessment{
 		FragmentID:    item.ID,
-		DeclaredBump:  declared,
 		SuggestedBump: versioning.BumpNone,
 	}
 
@@ -102,9 +92,8 @@ func assessFragment(stability Stability, item fragments.Fragment) FragmentAssess
 		add(breakingBump(), fmt.Sprintf("runtime=reduce implies %s while public API policy is %s", breakingBump(), stability))
 	}
 
-	if out.SuggestedBump == versioning.BumpNone && declared != versioning.BumpNone {
-		out.SuggestedBump = declared
-		out.Reasons = append(out.Reasons, fmt.Sprintf("no semantic levers present; fall back to declared bump=%s", declared))
+	if out.SuggestedBump == versioning.BumpNone {
+		out.Reasons = append(out.Reasons, "no semantic levers present; no release impact was inferred")
 	}
 
 	return out

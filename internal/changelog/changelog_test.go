@@ -20,8 +20,8 @@ func TestRebuildDeterministic(t *testing.T) {
 	}
 
 	frags := []fragments.Fragment{
-		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC), Type: "added", Bump: "minor"}, Body: "Bootstrap fragments.\n\nAdded fragment storage."},
-		{Metadata: fragments.Metadata{ID: "f2", CreatedAt: time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC), Type: "fixed", Bump: "patch"}, Body: "Fix render limits.\n\nDrops whole entries only."},
+		{Metadata: fragments.Metadata{ID: "f1", CreatedAt: time.Date(2026, 4, 2, 10, 0, 0, 0, time.UTC), Type: "added"}, Body: "Bootstrap fragments.\n\nAdded fragment storage."},
+		{Metadata: fragments.Metadata{ID: "f2", CreatedAt: time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC), Type: "fixed"}, Body: "Fix render limits.\n\nDrops whole entries only."},
 	}
 	records := []releases.ReleaseRecord{
 		{

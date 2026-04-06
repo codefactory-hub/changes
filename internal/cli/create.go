@@ -11,13 +11,11 @@ import (
 	"strings"
 
 	"github.com/example/changes/internal/fragments"
-	"github.com/example/changes/internal/versioning"
 )
 
 var allowedCreateTypes = []string{"added", "changed", "fixed"}
 
 type createOptions struct {
-	Bump                 string
 	Type                 string
 	PublicAPI            string
 	Behavior             string
@@ -46,12 +44,7 @@ func (a *App) runCreate(ctx context.Context, args []string) error {
 	}
 	a.promptIn = nil
 
-	bumpArg, rest, err := splitCreateArgs(args)
-	if err != nil {
-		return err
-	}
-
-	options, err := parseCreateOptions(rest)
+	options, err := parseCreateOptions(args)
 	if err != nil {
 		return err
 	}
@@ -85,7 +78,7 @@ func (a *App) runCreate(ctx context.Context, args []string) error {
 		if !a.isTTY() {
 			return fmt.Errorf("create: --edit requires an interactive terminal")
 		}
-		options, err = a.editCreateOptions(bumpArg, options)
+		options, err = a.editCreateOptions(options)
 		if err != nil {
 			return err
 		}
@@ -101,9 +94,6 @@ func (a *App) runCreate(ctx context.Context, args []string) error {
 			return fmt.Errorf("create: fragment body is required")
 		}
 	}
-	if strings.TrimSpace(options.Bump) != "" {
-		bumpArg = options.Bump
-	}
 
 	if err := validateCreateType(options.Type); err != nil {
 		return err
@@ -114,15 +104,9 @@ func (a *App) runCreate(ctx context.Context, args []string) error {
 		return err
 	}
 
-	normalizedBump, err := versioning.NormalizeBump(bumpArg)
-	if err != nil {
-		return err
-	}
-
 	item, err := fragments.Create(repoRoot, cfg, a.Now(), a.Random, fragments.NewInput{
 		NameStem:             options.Name,
 		Type:                 options.Type,
-		Bump:                 normalizedBump,
 		PublicAPI:            options.PublicAPI,
 		Behavior:             options.Behavior,
 		Dependency:           options.Dependency,
@@ -146,18 +130,6 @@ func (a *App) runCreate(ctx context.Context, args []string) error {
 
 	_, _ = fmt.Fprintf(a.Stdout, "%s\n", item.Path)
 	return nil
-}
-
-func splitCreateArgs(args []string) (string, []string, error) {
-	if len(args) == 0 {
-		return "", nil, fmt.Errorf("usage: changes create <patch|minor|major> [body] [--public-api <add|change|remove>] [--behavior <new|fix|redefine>] [--dependency <refresh|relax|restrict>] [--runtime <expand|reduce>] [--edit]")
-	}
-
-	bump := strings.TrimSpace(args[0])
-	if bump == "" || strings.HasPrefix(bump, "-") {
-		return "", nil, fmt.Errorf("usage: changes create <patch|minor|major> [body] [--public-api <add|change|remove>] [--behavior <new|fix|redefine>] [--dependency <refresh|relax|restrict>] [--runtime <expand|reduce>] [--edit]")
-	}
-	return bump, args[1:], nil
 }
 
 func parseCreateOptions(args []string) (createOptions, error) {
@@ -247,8 +219,8 @@ func (a *App) promptOptionalLine(label string) (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-func (a *App) editCreateOptions(defaultBump string, opts createOptions) (createOptions, error) {
-	path, err := a.writeCreateScaffold(defaultBump, opts)
+func (a *App) editCreateOptions(opts createOptions) (createOptions, error) {
+	path, err := a.writeCreateScaffold(opts)
 	if err != nil {
 		return createOptions{}, err
 	}
@@ -273,37 +245,28 @@ func (a *App) editCreateOptions(defaultBump string, opts createOptions) (createO
 	opts.Behavior = item.Behavior
 	opts.Dependency = item.Dependency
 	opts.Runtime = item.Runtime
-	if strings.TrimSpace(item.Bump) != "" {
-		defaultBump = item.Bump
-	}
-	if _, err := versioning.NormalizeBump(defaultBump); err != nil {
-		return createOptions{}, err
-	}
-	opts.Bump = defaultBump
 	opts.Body = item.Body
 	return opts, nil
 }
 
-func (a *App) writeCreateScaffold(bump string, opts createOptions) (string, error) {
+func (a *App) writeCreateScaffold(opts createOptions) (string, error) {
 	file, err := os.CreateTemp("", "changes-create-*.md")
 	if err != nil {
 		return "", fmt.Errorf("create editor draft: %w", err)
 	}
 	defer file.Close()
 
-	body := buildCreateScaffold(bump, opts)
+	body := buildCreateScaffold(opts)
 	if _, err := file.WriteString(body); err != nil {
 		return "", fmt.Errorf("write editor draft: %w", err)
 	}
 	return file.Name(), nil
 }
 
-func buildCreateScaffold(bump string, opts createOptions) string {
+func buildCreateScaffold(opts createOptions) string {
 	var builder strings.Builder
 	builder.WriteString("+++\n")
-	builder.WriteString("# Required semantic version impact for this fragment today.\n")
-	builder.WriteString(fmt.Sprintf("bump = %q\n", bump))
-	builder.WriteString("# Optional semver reasoning levers.\n")
+	builder.WriteString("# Optional semver reasoning levers. Release impact is inferred from these fields plus versioning.public_api.\n")
 	builder.WriteString("# public_api = \"add|change|remove\"\n")
 	if value := strings.TrimSpace(opts.PublicAPI); value != "" {
 		builder.WriteString(fmt.Sprintf("public_api = %q\n", value))
