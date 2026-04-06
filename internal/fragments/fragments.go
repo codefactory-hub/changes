@@ -136,18 +136,28 @@ func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader,
 		}
 		item.ID = id
 		item.Path = filepath.Join(dir, id+".md")
-		if _, err := os.Stat(item.Path); os.IsNotExist(err) {
-			break
-		} else if err != nil {
-			return Fragment{}, fmt.Errorf("stat fragment path: %w", err)
+		file, err := os.OpenFile(item.Path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if os.IsExist(err) {
+			item.ID = ""
+			item.Path = ""
+			continue
 		}
+		if err != nil {
+			return Fragment{}, fmt.Errorf("create fragment: %w", err)
+		}
+		if _, err := io.WriteString(file, item.Format()); err != nil {
+			_ = file.Close()
+			_ = os.Remove(item.Path)
+			return Fragment{}, fmt.Errorf("write fragment: %w", err)
+		}
+		if err := file.Close(); err != nil {
+			_ = os.Remove(item.Path)
+			return Fragment{}, fmt.Errorf("close fragment: %w", err)
+		}
+		break
 	}
 	if strings.TrimSpace(item.ID) == "" || strings.TrimSpace(item.Path) == "" {
 		return Fragment{}, fmt.Errorf("generate fragment id: unable to allocate unique path")
-	}
-
-	if err := os.WriteFile(item.Path, []byte(item.Format()), 0o644); err != nil {
-		return Fragment{}, fmt.Errorf("write fragment: %w", err)
 	}
 	if err := os.Chtimes(item.Path, item.CreatedAt, item.CreatedAt); err != nil {
 		return Fragment{}, fmt.Errorf("set fragment timestamp: %w", err)

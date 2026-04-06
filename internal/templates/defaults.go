@@ -47,14 +47,21 @@ func EnsureDefaultFiles(repoRoot string, cfg config.Config) (FileSet, error) {
 }
 
 func writeIfMissing(path, body string) (bool, error) {
-	if _, err := os.Stat(path); err == nil {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if os.IsExist(err) {
 		return false, nil
-	} else if !os.IsNotExist(err) {
-		return false, fmt.Errorf("stat template %s: %w", path, err)
 	}
-
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if err != nil {
+		return false, fmt.Errorf("create template %s: %w", path, err)
+	}
+	if _, err := file.WriteString(body); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
 		return false, fmt.Errorf("write template %s: %w", path, err)
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return false, fmt.Errorf("close template %s: %w", path, err)
 	}
 	return true, nil
 }

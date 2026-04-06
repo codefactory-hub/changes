@@ -36,21 +36,23 @@ type historyImportPromptData struct {
 type initializeDeps struct {
 	ensureDefaultFiles       func(string, config.Config) (templates.FileSet, error)
 	createAdoptionBootstrap  func(string, config.Config, versioning.Version, []releases.ReleaseRecord, time.Time, io.Reader) (fragments.Fragment, releases.ReleaseRecord, string, error)
-	writeHistoryImportPrompt func(string, config.Config, historyImportPromptData) (string, error)
+	writeHistoryImportPrompt func(*initTxn, string, config.Config, historyImportPromptData) (string, error)
 	stageHook                func(string) error
 }
 
 func Initialize(ctx context.Context, req InitializeRequest) (InitializeResult, error) {
-	_ = ctx
 	deps := initializeDeps{
 		ensureDefaultFiles:       templates.EnsureDefaultFiles,
 		createAdoptionBootstrap:  createAdoptionBootstrap,
 		writeHistoryImportPrompt: writeHistoryImportPrompt,
 	}
-	return initializeWithDeps(req, deps)
+	return initializeWithDeps(ctx, req, deps)
 }
 
-func initializeWithDeps(req InitializeRequest, deps initializeDeps) (result InitializeResult, err error) {
+func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initializeDeps) (result InitializeResult, err error) {
+	if err := checkContext(ctx); err != nil {
+		return InitializeResult{}, err
+	}
 	cfg, err := loadExistingOrDefaultConfig(req.RepoRoot)
 	if err != nil {
 		return InitializeResult{}, err
@@ -63,6 +65,9 @@ func initializeWithDeps(req InitializeRequest, deps initializeDeps) (result Init
 		return InitializeResult{}, err
 	}
 	if err := ensureBootstrapArtifactsAbsent(req.RepoRoot, cfg); err != nil {
+		return InitializeResult{}, err
+	}
+	if err := checkContext(ctx); err != nil {
 		return InitializeResult{}, err
 	}
 
@@ -89,13 +94,16 @@ func initializeWithDeps(req InitializeRequest, deps initializeDeps) (result Init
 			return InitializeResult{}, fmt.Errorf("create directory %s: %w", dir, err)
 		}
 	}
+	if err := checkContext(ctx); err != nil {
+		return InitializeResult{}, err
+	}
 
 	if _, statErr := os.Stat(config.RepoConfigPath(req.RepoRoot)); os.IsNotExist(statErr) {
 		raw, encodeErr := encodeTOML(cfg)
 		if encodeErr != nil {
 			return InitializeResult{}, encodeErr
 		}
-		if err := tx.WriteFile(config.RepoConfigPath(req.RepoRoot), raw, 0o644); err != nil {
+		if err := tx.WriteFileExclusive(config.RepoConfigPath(req.RepoRoot), raw, 0o644); err != nil {
 			return InitializeResult{}, fmt.Errorf("write config: %w", err)
 		}
 	} else if statErr != nil {
@@ -108,6 +116,9 @@ func initializeWithDeps(req InitializeRequest, deps initializeDeps) (result Init
 	}
 	for _, path := range fileSet.CreatedPaths {
 		tx.RecordCreatedFile(path)
+	}
+	if err := checkContext(ctx); err != nil {
+		return InitializeResult{}, err
 	}
 
 	changelogPath := config.ChangelogPath(req.RepoRoot, cfg)
@@ -128,6 +139,9 @@ func initializeWithDeps(req InitializeRequest, deps initializeDeps) (result Init
 	if err != nil {
 		return InitializeResult{}, err
 	}
+	if err := checkContext(ctx); err != nil {
+		return InitializeResult{}, err
+	}
 
 	result = InitializeResult{RepoRoot: req.RepoRoot}
 	if currentVersion != nil && releases.LatestFinalHeadForProduct(records, cfg.Project.Name) == nil {
@@ -139,6 +153,9 @@ func initializeWithDeps(req InitializeRequest, deps initializeDeps) (result Init
 		tx.RecordCreatedFile(recordPath)
 		result.AdoptionFragment = &fragment
 		result.AdoptionRecord = &record
+		if err := checkContext(ctx); err != nil {
+			return InitializeResult{}, err
+		}
 
 		if deps.stageHook != nil {
 			if err := deps.stageHook("after_bootstrap"); err != nil {
@@ -146,7 +163,7 @@ func initializeWithDeps(req InitializeRequest, deps initializeDeps) (result Init
 			}
 		}
 
-		promptPath, err := deps.writeHistoryImportPrompt(req.RepoRoot, cfg, historyImportPromptData{
+		promptPath, err := deps.writeHistoryImportPrompt(tx, req.RepoRoot, cfg, historyImportPromptData{
 			Product:             cfg.Project.Name,
 			CurrentVersionLabel: currentVersionLabel,
 			ChangelogPath:       config.ChangelogPath(req.RepoRoot, cfg),
@@ -162,8 +179,10 @@ func initializeWithDeps(req InitializeRequest, deps initializeDeps) (result Init
 		if err != nil {
 			return InitializeResult{}, err
 		}
-		tx.RecordCreatedFile(promptPath)
 		result.PromptPath = promptPath
+		if err := checkContext(ctx); err != nil {
+			return InitializeResult{}, err
+		}
 
 		if deps.stageHook != nil {
 			if err := deps.stageHook("after_prompt"); err != nil {
@@ -211,12 +230,9 @@ func createAdoptionBootstrap(repoRoot string, cfg config.Config, currentVersion 
 	return item, record, path, nil
 }
 
-func writeHistoryImportPrompt(repoRoot string, cfg config.Config, data historyImportPromptData) (string, error) {
+func writeHistoryImportPrompt(tx *initTxn, repoRoot string, cfg config.Config, data historyImportPromptData) (string, error) {
 	path := config.HistoryImportPromptPath(repoRoot, cfg)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("create prompt directory: %w", err)
-	}
-	if err := os.WriteFile(path, []byte(renderHistoryImportPrompt(repoRoot, data)), 0o644); err != nil {
+	if err := tx.WriteFileExclusive(path, []byte(renderHistoryImportPrompt(repoRoot, data)), 0o644); err != nil {
 		return "", fmt.Errorf("write history-import prompt: %w", err)
 	}
 	return path, nil
@@ -398,15 +414,13 @@ func (tx *initTxn) MkdirAll(path string, perm os.FileMode) error {
 }
 
 func (tx *initTxn) WriteFileIfMissing(path string, body []byte, perm os.FileMode) (bool, error) {
-	if _, err := os.Stat(path); err == nil {
+	if err := tx.WriteFileExclusive(path, body, perm); err == nil {
+		return true, nil
+	} else if os.IsExist(err) {
 		return false, nil
-	} else if !os.IsNotExist(err) {
+	} else {
 		return false, err
 	}
-	if err := tx.WriteFile(path, body, perm); err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 func (tx *initTxn) WriteFile(path string, body []byte, perm os.FileMode) error {
@@ -430,7 +444,54 @@ func (tx *initTxn) WriteFile(path string, body []byte, perm os.FileMode) error {
 	} else {
 		return err
 	}
-	return os.WriteFile(path, body, perm)
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(body); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
+}
+
+func (tx *initTxn) WriteFileExclusive(path string, body []byte, perm os.FileMode) error {
+	if err := tx.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+	if err != nil {
+		return err
+	}
+	tx.RecordCreatedFile(path)
+	if _, err := file.Write(body); err != nil {
+		_ = file.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	return nil
 }
 
 func (tx *initTxn) RecordCreatedFile(path string) {

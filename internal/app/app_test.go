@@ -76,22 +76,25 @@ func TestInitializeRollsBackAfterBootstrapFailure(t *testing.T) {
 	cfg.Project.Name = filepath.Base(repoRoot)
 
 	errBoom := errors.New("boom after bootstrap")
-	_, err := initializeWithDeps(InitializeRequest{
-		RepoRoot:       repoRoot,
-		CurrentVersion: "2.7.4",
-		Now:            now,
-		Random:         bytes.NewReader([]byte{9, 10, 11, 12}),
-	}, initializeDeps{
-		ensureDefaultFiles:       templates.EnsureDefaultFiles,
-		createAdoptionBootstrap:  createAdoptionBootstrap,
-		writeHistoryImportPrompt: writeHistoryImportPrompt,
-		stageHook: func(stage string) error {
-			if stage == "after_bootstrap" {
-				return errBoom
-			}
-			return nil
+	_, err := initializeWithDeps(
+		context.Background(),
+		InitializeRequest{
+			RepoRoot:       repoRoot,
+			CurrentVersion: "2.7.4",
+			Now:            now,
+			Random:         bytes.NewReader([]byte{9, 10, 11, 12}),
+		}, initializeDeps{
+			ensureDefaultFiles:       templates.EnsureDefaultFiles,
+			createAdoptionBootstrap:  createAdoptionBootstrap,
+			writeHistoryImportPrompt: writeHistoryImportPrompt,
+			stageHook: func(stage string) error {
+				if stage == "after_bootstrap" {
+					return errBoom
+				}
+				return nil
+			},
 		},
-	})
+	)
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("initializeWithDeps error = %v, want %v", err, errBoom)
 	}
@@ -111,21 +114,24 @@ func TestInitializeRestoresGitignoreOnFailure(t *testing.T) {
 	}
 
 	errBoom := errors.New("boom after gitignore")
-	_, err := initializeWithDeps(InitializeRequest{
-		RepoRoot: repoRoot,
-		Now:      time.Date(2026, 4, 6, 13, 30, 0, 0, time.UTC),
-		Random:   bytes.NewReader([]byte{1, 1, 1, 1}),
-	}, initializeDeps{
-		ensureDefaultFiles:       templates.EnsureDefaultFiles,
-		createAdoptionBootstrap:  createAdoptionBootstrap,
-		writeHistoryImportPrompt: writeHistoryImportPrompt,
-		stageHook: func(stage string) error {
-			if stage == "after_gitignore" {
-				return errBoom
-			}
-			return nil
+	_, err := initializeWithDeps(
+		context.Background(),
+		InitializeRequest{
+			RepoRoot: repoRoot,
+			Now:      time.Date(2026, 4, 6, 13, 30, 0, 0, time.UTC),
+			Random:   bytes.NewReader([]byte{1, 1, 1, 1}),
+		}, initializeDeps{
+			ensureDefaultFiles:       templates.EnsureDefaultFiles,
+			createAdoptionBootstrap:  createAdoptionBootstrap,
+			writeHistoryImportPrompt: writeHistoryImportPrompt,
+			stageHook: func(stage string) error {
+				if stage == "after_gitignore" {
+					return errBoom
+				}
+				return nil
+			},
 		},
-	})
+	)
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("initializeWithDeps error = %v, want %v", err, errBoom)
 	}
@@ -436,6 +442,28 @@ func TestRenderSupportsLatestVersionAndRecordSelectors(t *testing.T) {
 	}
 	if byRecord.Record.Version != "2.7.4" {
 		t.Fatalf("rendered record version = %s, want 2.7.4", byRecord.Record.Version)
+	}
+}
+
+func TestApplicationLayerHonorsCanceledContext(t *testing.T) {
+	repoRoot := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := Initialize(ctx, InitializeRequest{RepoRoot: repoRoot}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Initialize error = %v, want %v", err, context.Canceled)
+	}
+	if _, err := Status(ctx, StatusRequest{RepoRoot: repoRoot}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Status error = %v, want %v", err, context.Canceled)
+	}
+	if _, err := PlanRelease(ctx, ReleasePlanRequest{RepoRoot: repoRoot}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("PlanRelease error = %v, want %v", err, context.Canceled)
+	}
+	if _, err := CommitRelease(ctx, ReleasePlan{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("CommitRelease error = %v, want %v", err, context.Canceled)
+	}
+	if _, err := Render(ctx, RenderRequest{RepoRoot: repoRoot}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Render error = %v, want %v", err, context.Canceled)
 	}
 }
 

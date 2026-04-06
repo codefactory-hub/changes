@@ -2,9 +2,13 @@ package fragments
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/example/changes/internal/config"
 )
 
 func TestGenerateID(t *testing.T) {
@@ -76,5 +80,41 @@ func TestFormatParseRoundTrip(t *testing.T) {
 	}
 	if strings.Contains(raw, "title = ") || strings.Contains(raw, "id = ") || strings.Contains(raw, "created_at = ") {
 		t.Fatalf("formatted fragment should omit derived metadata: %s", raw)
+	}
+}
+
+func TestCreateDoesNotOverwriteExistingFragmentOnCollision(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := config.Default()
+	now := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
+
+	dir := config.FragmentsDir(repoRoot, cfg)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir fragments dir: %v", err)
+	}
+	existingPath := filepath.Join(dir, "20260406-120000--sample--amber-beacon-carries.md")
+	original := "existing fragment contents"
+	if err := os.WriteFile(existingPath, []byte(original), 0o644); err != nil {
+		t.Fatalf("write existing fragment: %v", err)
+	}
+
+	item, err := Create(repoRoot, cfg, now, bytes.NewReader([]byte{0, 1, 2, 3, 4, 5}), NewInput{
+		NameStem: "sample",
+		Behavior: "fix",
+		Body:     "Fix a release-visible bug.",
+	})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if item.Path == existingPath {
+		t.Fatalf("Create reused colliding path %s", item.Path)
+	}
+
+	raw, err := os.ReadFile(existingPath)
+	if err != nil {
+		t.Fatalf("read original fragment: %v", err)
+	}
+	if string(raw) != original {
+		t.Fatalf("existing fragment was overwritten: got %q want %q", string(raw), original)
 	}
 }

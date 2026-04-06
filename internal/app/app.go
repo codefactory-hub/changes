@@ -56,10 +56,7 @@ type ReleasePlanRequest struct {
 
 type ReleasePlan struct {
 	RepoRoot          string
-	Config            config.Config
 	Product           string
-	AllFragments      []fragments.Fragment
-	Records           []releases.ReleaseRecord
 	PendingFragments  []fragments.Fragment
 	Recommendation    semverpolicy.Recommendation
 	ChosenVersion     versioning.Version
@@ -92,13 +89,19 @@ type RenderResult struct {
 	Content  string
 }
 
-func Status(_ context.Context, req StatusRequest) (StatusResult, error) {
+func Status(ctx context.Context, req StatusRequest) (StatusResult, error) {
+	if err := checkContext(ctx); err != nil {
+		return StatusResult{}, err
+	}
 	cfg, err := config.Load(req.RepoRoot)
 	if err != nil {
 		return StatusResult{}, err
 	}
 	allFragments, records, err := loadState(req.RepoRoot, cfg)
 	if err != nil {
+		return StatusResult{}, err
+	}
+	if err := checkContext(ctx); err != nil {
 		return StatusResult{}, err
 	}
 
@@ -129,13 +132,19 @@ func Status(_ context.Context, req StatusRequest) (StatusResult, error) {
 	}, nil
 }
 
-func PlanRelease(_ context.Context, req ReleasePlanRequest) (ReleasePlan, error) {
+func PlanRelease(ctx context.Context, req ReleasePlanRequest) (ReleasePlan, error) {
+	if err := checkContext(ctx); err != nil {
+		return ReleasePlan{}, err
+	}
 	cfg, err := config.Load(req.RepoRoot)
 	if err != nil {
 		return ReleasePlan{}, err
 	}
 	allFragments, records, err := loadState(req.RepoRoot, cfg)
 	if err != nil {
+		return ReleasePlan{}, err
+	}
+	if err := checkContext(ctx); err != nil {
 		return ReleasePlan{}, err
 	}
 
@@ -156,10 +165,7 @@ func PlanRelease(_ context.Context, req ReleasePlanRequest) (ReleasePlan, error)
 
 	return ReleasePlan{
 		RepoRoot:          req.RepoRoot,
-		Config:            cfg,
 		Product:           product,
-		AllFragments:      allFragments,
-		Records:           records,
 		PendingFragments:  pending,
 		Recommendation:    recommendation,
 		ChosenVersion:     chosenVersion,
@@ -171,7 +177,10 @@ func PlanRelease(_ context.Context, req ReleasePlanRequest) (ReleasePlan, error)
 	}, nil
 }
 
-func CommitRelease(_ context.Context, plan ReleasePlan) (CommitReleaseResult, error) {
+func CommitRelease(ctx context.Context, plan ReleasePlan) (CommitReleaseResult, error) {
+	if err := checkContext(ctx); err != nil {
+		return CommitReleaseResult{}, err
+	}
 	return commitReleaseWithTimestamp(plan, releasePlanTime(plan.CreatedAt))
 }
 
@@ -194,11 +203,15 @@ func commitReleaseWithTimestamp(plan ReleasePlan, createdAt time.Time) (CommitRe
 	if !slices.Equal(fragmentIDs(currentSelection), fragmentIDs(plan.SelectedFragments)) {
 		return CommitReleaseResult{}, fmt.Errorf("release plan is stale; refresh the release plan before committing")
 	}
+	parentVersion := selectParentVersion(currentRecords, plan.Product, plan.ChosenVersion)
+	if parentVersion != plan.ParentVersion {
+		return CommitReleaseResult{}, fmt.Errorf("release plan is stale; refresh the release plan before committing")
+	}
 
 	record := releases.ReleaseRecord{
 		Product:          plan.Product,
 		Version:          plan.ChosenVersion.String(),
-		ParentVersion:    plan.ParentVersion,
+		ParentVersion:    parentVersion,
 		CreatedAt:        createdAt.UTC().Truncate(time.Second),
 		AddedFragmentIDs: fragmentIDs(plan.SelectedFragments),
 	}
@@ -215,13 +228,19 @@ func commitReleaseWithTimestamp(plan ReleasePlan, createdAt time.Time) (CommitRe
 	return CommitReleaseResult{Path: path, Record: record}, nil
 }
 
-func Render(_ context.Context, req RenderRequest) (RenderResult, error) {
+func Render(ctx context.Context, req RenderRequest) (RenderResult, error) {
+	if err := checkContext(ctx); err != nil {
+		return RenderResult{}, err
+	}
 	cfg, err := config.Load(req.RepoRoot)
 	if err != nil {
 		return RenderResult{}, err
 	}
 	allFragments, records, err := loadState(req.RepoRoot, cfg)
 	if err != nil {
+		return RenderResult{}, err
+	}
+	if err := checkContext(ctx); err != nil {
 		return RenderResult{}, err
 	}
 
@@ -482,4 +501,11 @@ func releasePlanTime(now time.Time) time.Time {
 		now = time.Now()
 	}
 	return now.UTC().Truncate(time.Second)
+}
+
+func checkContext(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.Err()
 }
