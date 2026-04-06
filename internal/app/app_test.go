@@ -13,7 +13,6 @@ import (
 	"github.com/example/changes/internal/config"
 	"github.com/example/changes/internal/fragments"
 	"github.com/example/changes/internal/releases"
-	"github.com/example/changes/internal/templates"
 )
 
 func TestInitializeUnreleasedCreatesNoBootstrapArtifacts(t *testing.T) {
@@ -41,6 +40,9 @@ func TestInitializeUnreleasedCreatesNoBootstrapArtifacts(t *testing.T) {
 	}
 	if _, err := os.Stat(config.HistoryImportPromptPath(repoRoot, cfg)); !os.IsNotExist(err) {
 		t.Fatalf("history import prompt should not exist, err=%v", err)
+	}
+	if _, err := os.Stat(config.TemplatesDir(repoRoot, cfg)); !os.IsNotExist(err) {
+		t.Fatalf("templates dir should not exist after init, err=%v", err)
 	}
 }
 
@@ -84,7 +86,6 @@ func TestInitializeRollsBackAfterBootstrapFailure(t *testing.T) {
 			Now:            now,
 			Random:         bytes.NewReader([]byte{9, 10, 11, 12}),
 		}, initializeDeps{
-			ensureDefaultFiles:       templates.EnsureDefaultFiles,
 			createAdoptionBootstrap:  createAdoptionBootstrap,
 			writeHistoryImportPrompt: writeHistoryImportPrompt,
 			stageHook: func(stage string) error {
@@ -121,7 +122,6 @@ func TestInitializeRestoresGitignoreOnFailure(t *testing.T) {
 			Now:      time.Date(2026, 4, 6, 13, 30, 0, 0, time.UTC),
 			Random:   bytes.NewReader([]byte{1, 1, 1, 1}),
 		}, initializeDeps{
-			ensureDefaultFiles:       templates.EnsureDefaultFiles,
 			createAdoptionBootstrap:  createAdoptionBootstrap,
 			writeHistoryImportPrompt: writeHistoryImportPrompt,
 			stageHook: func(stage string) error {

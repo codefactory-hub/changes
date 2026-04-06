@@ -15,7 +15,6 @@ import (
 	"github.com/example/changes/internal/config"
 	"github.com/example/changes/internal/fragments"
 	"github.com/example/changes/internal/releases"
-	"github.com/example/changes/internal/templates"
 	"github.com/example/changes/internal/versioning"
 )
 
@@ -34,7 +33,6 @@ type historyImportPromptData struct {
 }
 
 type initializeDeps struct {
-	ensureDefaultFiles       func(string, config.Config) (templates.FileSet, error)
 	createAdoptionBootstrap  func(string, config.Config, versioning.Version, []releases.ReleaseRecord, time.Time, io.Reader) (fragments.Fragment, releases.ReleaseRecord, string, error)
 	writeHistoryImportPrompt func(*initTxn, string, config.Config, historyImportPromptData) (string, error)
 	stageHook                func(string) error
@@ -42,7 +40,6 @@ type initializeDeps struct {
 
 func Initialize(ctx context.Context, req InitializeRequest) (InitializeResult, error) {
 	deps := initializeDeps{
-		ensureDefaultFiles:       templates.EnsureDefaultFiles,
 		createAdoptionBootstrap:  createAdoptionBootstrap,
 		writeHistoryImportPrompt: writeHistoryImportPrompt,
 	}
@@ -87,7 +84,6 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 		config.FragmentsDir(req.RepoRoot, cfg),
 		config.ReleasesDir(req.RepoRoot, cfg),
 		config.PromptsDir(req.RepoRoot, cfg),
-		config.TemplatesDir(req.RepoRoot, cfg),
 		config.StateDir(req.RepoRoot, cfg),
 	} {
 		if err := tx.MkdirAll(dir, 0o755); err != nil {
@@ -108,17 +104,6 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 		}
 	} else if statErr != nil {
 		return InitializeResult{}, fmt.Errorf("stat config: %w", statErr)
-	}
-
-	fileSet, err := deps.ensureDefaultFiles(req.RepoRoot, cfg)
-	if err != nil {
-		return InitializeResult{}, err
-	}
-	for _, path := range fileSet.CreatedPaths {
-		tx.RecordCreatedFile(path)
-	}
-	if err := checkContext(ctx); err != nil {
-		return InitializeResult{}, err
 	}
 
 	changelogPath := config.ChangelogPath(req.RepoRoot, cfg)

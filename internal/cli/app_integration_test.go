@@ -36,7 +36,7 @@ func TestAppEndToEnd(t *testing.T) {
 
 	assertExists(t, filepath.Join(repoRoot, ".config/changes/config.toml"))
 	assertNotExists(t, config.HistoryImportPromptPath(repoRoot, config.Default()))
-	assertExists(t, filepath.Join(repoRoot, ".local/share/changes/templates/repository-markdown-release.md.tmpl"))
+	assertNotExists(t, filepath.Join(repoRoot, ".local/share/changes/templates/repository-markdown-release.md.tmpl"))
 
 	gitignore, err := os.ReadFile(filepath.Join(repoRoot, ".gitignore"))
 	if err != nil {

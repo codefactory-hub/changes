@@ -416,7 +416,7 @@ Use "changes help <command>" or "changes <command> --help" for details.
 Usage:
   changes init [--current-version <semver|unreleased>]
 
-Initialize repo-local config, templates, changelog, prompts, and state directories.
+Initialize repo-local config, changelog, prompts, and state directories.
 `)
 	case "create":
 		body = strings.TrimSpace(`
