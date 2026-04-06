@@ -39,8 +39,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Design and implement the shared layout model and resolver APIs
-- [ ] 02-02: Wire global and repo-local path consumers to the new resolver core
+- [ ] 02-01-PLAN.md — Build the shared resolver contracts, candidate model, and manifest normalization core
+- [ ] 02-02-PLAN.md — Rebase config APIs on the resolver core and add deterministic repo-init selection helpers
 
 ### Phase 3: Authority and Safety
 **Goal**: Enforce authoritative-layout rules and make ambiguity visible, inspectable, and non-destructive
