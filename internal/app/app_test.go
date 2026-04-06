@@ -454,6 +454,78 @@ func TestRenderSupportsLatestVersionAndRecordSelectors(t *testing.T) {
 	}
 }
 
+func TestRenderValidatesSelectorsAndLatestAvailability(t *testing.T) {
+	repoRoot := t.TempDir()
+	now := time.Date(2026, 4, 6, 17, 15, 0, 0, time.UTC)
+
+	if _, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot: repoRoot,
+		Now:      now,
+		Random:   bytes.NewReader([]byte{1, 2, 3, 4}),
+	}); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+
+	if _, err := Render(context.Background(), RenderRequest{RepoRoot: repoRoot}); err == nil || !strings.Contains(err.Error(), "provide exactly one") {
+		t.Fatalf("Render without selector error = %v, want selector validation", err)
+	}
+	if _, err := Render(context.Background(), RenderRequest{
+		RepoRoot: repoRoot,
+		Version:  "0.1.0",
+		Latest:   true,
+	}); err == nil || !strings.Contains(err.Error(), "provide exactly one") {
+		t.Fatalf("Render with conflicting selectors error = %v, want selector validation", err)
+	}
+	if _, err := Render(context.Background(), RenderRequest{
+		RepoRoot: repoRoot,
+		Latest:   true,
+	}); err == nil || !strings.Contains(err.Error(), "no final release records exist") {
+		t.Fatalf("Render latest before release error = %v, want missing latest record failure", err)
+	}
+}
+
+func TestCommitReleaseRejectsPlanWhenPendingFragmentsChange(t *testing.T) {
+	repoRoot := t.TempDir()
+	now := time.Date(2026, 4, 6, 17, 30, 0, 0, time.UTC)
+
+	if _, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot: repoRoot,
+		Now:      now,
+		Random:   bytes.NewReader([]byte{1, 2, 3, 4}),
+	}); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+	cfg, err := config.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if _, err := fragments.Create(repoRoot, cfg, now.Add(time.Minute), bytes.NewReader([]byte{5, 6, 7, 8}), fragments.NewInput{
+		Behavior: "fix",
+		Body:     "Fix the first shipped parser crash.",
+	}); err != nil {
+		t.Fatalf("create fragment: %v", err)
+	}
+
+	plan, err := PlanRelease(context.Background(), ReleasePlanRequest{
+		RepoRoot: repoRoot,
+		Now:      now.Add(2 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("PlanRelease returned error: %v", err)
+	}
+
+	if _, err := fragments.Create(repoRoot, cfg, now.Add(3*time.Minute), bytes.NewReader([]byte{9, 10, 11, 12}), fragments.NewInput{
+		PublicAPI: "add",
+		Body:      "Add a new parser extension point.",
+	}); err != nil {
+		t.Fatalf("create second fragment: %v", err)
+	}
+
+	if _, err := CommitRelease(context.Background(), plan); err == nil || !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("CommitRelease stale-plan error = %v, want stale", err)
+	}
+}
+
 func TestApplicationLayerHonorsCanceledContext(t *testing.T) {
 	repoRoot := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())

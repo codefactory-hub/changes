@@ -805,6 +805,159 @@ func TestReleasePromptCanCancel(t *testing.T) {
 	}
 }
 
+func TestReleasePromptRequiresOverrideWhenNoBumpIsInferred(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 13, 15, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{2, 3, 4})
+	app.IsTTY = func() bool { return true }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"Refactor parser wiring without release-visible changes.",
+	}); err != nil {
+		t.Fatalf("create returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	app.Stdin = strings.NewReader("\n")
+	err := app.Run(context.Background(), []string{"release"})
+	if err == nil || !strings.Contains(err.Error(), "choose patch, minor, major, or cancel") {
+		t.Fatalf("unexpected no-bump release error: %v\nstderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "No version bump was inferred. Choose patch/minor/major to override, or type cancel: ") {
+		t.Fatalf("missing no-bump prompt:\n%s", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 13, 20, 0, 0, time.UTC)
+	}
+	app.Stdin = strings.NewReader("patch\n")
+	if err := app.Run(context.Background(), []string{"release"}); err != nil {
+		t.Fatalf("interactive release override returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	recordPath := strings.TrimSpace(strings.Split(stdout.String(), "\n")[len(strings.Split(strings.TrimSpace(stdout.String()), "\n"))-1])
+	record, err := releases.Load(recordPath)
+	if err != nil {
+		t.Fatalf("load release record: %v", err)
+	}
+	if record.Version != "0.1.0" {
+		t.Fatalf("override release version = %q, want 0.1.0", record.Version)
+	}
+}
+
+func TestRenderRejectsInvalidSelectorsAndCanRenderByRecordPath(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 14, 45, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{8, 7, 6, 5})
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"--behavior", "fix",
+		"Fix a parser output issue.",
+	}); err != nil {
+		t.Fatalf("create returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err := app.Run(context.Background(), []string{"render"})
+	if err == nil || !strings.Contains(stderr.String(), "provide exactly one of --version, --record, or --latest") {
+		t.Fatalf("render without selector should fail:\nstdout=%s\nstderr=%s\nerr=%v", stdout.String(), stderr.String(), err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err = app.Run(context.Background(), []string{"render", "--version", "0.1.0", "--latest"})
+	if err == nil || !strings.Contains(stderr.String(), "provide exactly one of --version, --record, or --latest") {
+		t.Fatalf("render with conflicting selectors should fail:\nstdout=%s\nstderr=%s\nerr=%v", stdout.String(), stderr.String(), err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"release", "--accept"}); err != nil {
+		t.Fatalf("release returned error: %v", err)
+	}
+	recordPath := strings.TrimSpace(stdout.String())
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"render", "--record", recordPath}); err != nil {
+		t.Fatalf("render by record returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "# Release 0.1.0") {
+		t.Fatalf("render by record missing release heading:\n%s", got)
+	}
+}
+
+func TestCreateSupportsBodyFlagAndRejectsMixedBodyInputs(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{9, 9, 9})
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"create", "--body", "Body from flag"}); err != nil {
+		t.Fatalf("create --body returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	fragmentPath := strings.TrimSpace(stdout.String())
+	raw, err := os.ReadFile(fragmentPath)
+	if err != nil {
+		t.Fatalf("read fragment: %v", err)
+	}
+	if !strings.Contains(string(raw), "Body from flag") {
+		t.Fatalf("fragment missing --body content:\n%s", raw)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err = app.Run(context.Background(), []string{"create", "--body", "flag body", "trailing body"})
+	if err == nil || !strings.Contains(stderr.String(), "pass the body either with --body or as the trailing argument") {
+		t.Fatalf("create mixed body inputs should fail:\nstdout=%s\nstderr=%s\nerr=%v", stdout.String(), stderr.String(), err)
+	}
+}
+
 func TestReleaseValidatesAcceptAndOverrideFlags(t *testing.T) {
 	repoRoot := t.TempDir()
 	gitInit(t, repoRoot)
