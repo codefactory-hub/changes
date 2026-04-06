@@ -72,7 +72,10 @@ func TestAppEndToEnd(t *testing.T) {
 		t.Fatalf("status returned error: %v", err)
 	}
 	status := stdout.String()
-	if !strings.Contains(status, "Unreleased fragments: 1") || !strings.Contains(status, "Recommended next stable: 0.1.0") {
+	if !strings.Contains(status, "Current version: unreleased") ||
+		!strings.Contains(status, "Initial release target: 0.1.0") ||
+		!strings.Contains(status, "Unreleased fragments: 1") ||
+		!strings.Contains(status, "Recommended next final: 0.1.0") {
 		t.Fatalf("unexpected status output:\n%s", status)
 	}
 
@@ -461,7 +464,7 @@ func TestInitCurrentVersionCreatesAdoptionBootstrap(t *testing.T) {
 	if err := app.Run(context.Background(), []string{"status"}); err != nil {
 		t.Fatalf("status returned error: %v", err)
 	}
-	if got := stdout.String(); !strings.Contains(got, "Unreleased fragments: 0") || !strings.Contains(got, "Recommended next stable: 2.7.4") {
+	if got := stdout.String(); !strings.Contains(got, "Current version: 2.7.4") || !strings.Contains(got, "Recommended next final: 2.7.4") {
 		t.Fatalf("unexpected status output:\n%s", got)
 	}
 
@@ -488,7 +491,7 @@ func TestInitCurrentVersionCreatesAdoptionBootstrap(t *testing.T) {
 	if err := app.Run(context.Background(), []string{"status"}); err != nil {
 		t.Fatalf("status after create returned error: %v", err)
 	}
-	if got := stdout.String(); !strings.Contains(got, "Recommended next stable: 2.7.5") {
+	if got := stdout.String(); !strings.Contains(got, "Recommended next final: 2.7.5") {
 		t.Fatalf("unexpected post-adoption status:\n%s", got)
 	}
 

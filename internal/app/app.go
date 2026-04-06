@@ -36,14 +36,15 @@ type StatusRequest struct {
 }
 
 type StatusResult struct {
-	RepoRoot               string
-	Config                 config.Config
-	CurrentVersionBaseline versioning.Version
-	CurrentVersionSource   string
-	PendingFragments       []fragments.Fragment
-	PrereleaseHeads        []releases.ReleaseRecord
-	Recommendation         semverpolicy.Recommendation
-	RecommendedNextStable  versioning.Version
+	RepoRoot             string
+	Config               config.Config
+	CurrentVersionLabel  string
+	CurrentVersionSource string
+	InitialReleaseTarget *versioning.Version
+	PendingFragments     []fragments.Fragment
+	PrereleaseHeads      []releases.ReleaseRecord
+	Recommendation       semverpolicy.Recommendation
+	RecommendedNextFinal versioning.Version
 }
 
 type ReleasePlanRequest struct {
@@ -115,20 +116,21 @@ func Status(ctx context.Context, req StatusRequest) (StatusResult, error) {
 	if err != nil {
 		return StatusResult{}, err
 	}
-	currentBaseline, source, err := currentVersionBaseline(cfg, records, product)
+	currentLabel, source, initialTarget, err := currentVersionStatus(cfg, records, product)
 	if err != nil {
 		return StatusResult{}, err
 	}
 
 	return StatusResult{
-		RepoRoot:               req.RepoRoot,
-		Config:                 cfg,
-		CurrentVersionBaseline: currentBaseline,
-		CurrentVersionSource:   source,
-		PendingFragments:       pending,
-		PrereleaseHeads:        releases.PrereleaseHeads(records, product),
-		Recommendation:         recommendation,
-		RecommendedNextStable:  nextStable,
+		RepoRoot:             req.RepoRoot,
+		Config:               cfg,
+		CurrentVersionLabel:  currentLabel,
+		CurrentVersionSource: source,
+		InitialReleaseTarget: initialTarget,
+		PendingFragments:     pending,
+		PrereleaseHeads:      releases.PrereleaseHeads(records, product),
+		Recommendation:       recommendation,
+		RecommendedNextFinal: nextStable,
 	}, nil
 }
 
@@ -331,15 +333,15 @@ func recommendationPolicy(cfg config.Config, pending []fragments.Fragment) semve
 	return semverpolicy.Evaluate(publicAPIStability(cfg.Versioning.PublicAPI), pending)
 }
 
-func currentVersionBaseline(cfg config.Config, records []releases.ReleaseRecord, product string) (versioning.Version, string, error) {
+func currentVersionStatus(cfg config.Config, records []releases.ReleaseRecord, product string) (string, string, *versioning.Version, error) {
 	if record := releases.LatestFinalHeadForProduct(records, product); record != nil {
-		return versioning.MustParse(record.Version), "latest_release_record", nil
+		return record.Version, "latest_release_record", nil, nil
 	}
 	initial, err := versioning.Parse(cfg.Project.InitialVersion)
 	if err != nil {
-		return versioning.Version{}, "", fmt.Errorf("parse initial version: %w", err)
+		return "", "", nil, fmt.Errorf("parse initial version: %w", err)
 	}
-	return initial, "initial_version", nil
+	return "unreleased", "unreleased", &initial, nil
 }
 
 func recommendedPreviewVersion(records []releases.ReleaseRecord, product string, target versioning.Version, label string) versioning.Version {

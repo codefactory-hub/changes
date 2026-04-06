@@ -145,7 +145,7 @@ func TestInitializeRestoresGitignoreOnFailure(t *testing.T) {
 	}
 }
 
-func TestStatusUsesInitialVersionOrLatestReleaseRecord(t *testing.T) {
+func TestStatusUsesUnreleasedOrLatestReleaseRecord(t *testing.T) {
 	repoRoot := t.TempDir()
 	now := time.Date(2026, 4, 6, 14, 0, 0, 0, time.UTC)
 
@@ -172,11 +172,17 @@ func TestStatusUsesInitialVersionOrLatestReleaseRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Status returned error: %v", err)
 	}
-	if result.CurrentVersionSource != "initial_version" {
-		t.Fatalf("current version source = %q, want initial_version", result.CurrentVersionSource)
+	if result.CurrentVersionSource != "unreleased" {
+		t.Fatalf("current version source = %q, want unreleased", result.CurrentVersionSource)
 	}
-	if got := result.CurrentVersionBaseline.String(); got != "0.1.0" {
-		t.Fatalf("current version baseline = %q, want 0.1.0", got)
+	if result.CurrentVersionLabel != "unreleased" {
+		t.Fatalf("current version label = %q, want unreleased", result.CurrentVersionLabel)
+	}
+	if result.InitialReleaseTarget == nil {
+		t.Fatalf("initial release target = nil, want 0.1.0")
+	}
+	if got := result.InitialReleaseTarget.String(); got != "0.1.0" {
+		t.Fatalf("initial release target = %q, want 0.1.0", got)
 	}
 
 	adoptedRepo := t.TempDir()
@@ -195,8 +201,11 @@ func TestStatusUsesInitialVersionOrLatestReleaseRecord(t *testing.T) {
 	if adoptedStatus.CurrentVersionSource != "latest_release_record" {
 		t.Fatalf("current version source = %q, want latest_release_record", adoptedStatus.CurrentVersionSource)
 	}
-	if got := adoptedStatus.CurrentVersionBaseline.String(); got != "2.7.4" {
-		t.Fatalf("current version baseline = %q, want 2.7.4", got)
+	if adoptedStatus.CurrentVersionLabel != "2.7.4" {
+		t.Fatalf("current version label = %q, want 2.7.4", adoptedStatus.CurrentVersionLabel)
+	}
+	if adoptedStatus.InitialReleaseTarget != nil {
+		t.Fatalf("initial release target = %v, want nil", adoptedStatus.InitialReleaseTarget)
 	}
 }
 

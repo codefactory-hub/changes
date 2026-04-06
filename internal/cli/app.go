@@ -145,11 +145,14 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 		return err
 	}
 
-	_, _ = fmt.Fprintf(a.Stdout, "Current version: %s\n", result.CurrentVersionBaseline.String())
+	_, _ = fmt.Fprintf(a.Stdout, "Current version: %s\n", result.CurrentVersionLabel)
 	_, _ = fmt.Fprintf(a.Stdout, "Current version source: %s\n", result.CurrentVersionSource)
+	if result.InitialReleaseTarget != nil {
+		_, _ = fmt.Fprintf(a.Stdout, "Initial release target: %s\n", result.InitialReleaseTarget.String())
+	}
 	_, _ = fmt.Fprintf(a.Stdout, "Unreleased fragments: %d\n", len(result.PendingFragments))
 	_, _ = fmt.Fprintf(a.Stdout, "Recommended bump: %s\n", result.Recommendation.SuggestedBump)
-	_, _ = fmt.Fprintf(a.Stdout, "Recommended next stable: %s\n", result.RecommendedNextStable.String())
+	_, _ = fmt.Fprintf(a.Stdout, "Recommended next final: %s\n", result.RecommendedNextFinal.String())
 	if explain {
 		renderRecommendationExplanation(a.Stdout, result.Recommendation)
 	}
@@ -446,7 +449,7 @@ Options:
 Usage:
   changes status [--explain]
 
-Show the current version baseline, unreleased fragment counts, the policy-derived recommended bump, the recommended next stable version, and active prerelease heads.
+Show the current version state, unreleased fragment counts, the policy-derived recommended bump, the recommended next final version, and active prerelease heads.
 `)
 	case "release":
 		body = strings.TrimSpace(`
