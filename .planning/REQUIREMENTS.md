@@ -7,13 +7,13 @@
 
 ### Global Layout Resolution
 
-- [ ] **GLBL-01**: `changes` prefers `CHANGES_HOME` over XDG environment variables when resolving the active global layout
-- [ ] **GLBL-02**: `changes` can resolve global config, data, and state paths from either XDG-style directories or a single-root global layout
+- [x] **GLBL-01**: `changes` prefers `CHANGES_HOME` over XDG environment variables when resolving the active global layout
+- [x] **GLBL-02**: `changes` can resolve global config, data, and state paths from either XDG-style directories or a single-root global layout
 - [ ] **GLBL-03**: `changes` can explain which global layout source won and why
 
 ### Repository Layout Resolution
 
-- [ ] **REPO-01**: `changes` can resolve repo-local config, data, and state paths from either the default repo-local XDG-style layout or a declared single-root repo-local layout
+- [x] **REPO-01**: `changes` can resolve repo-local config, data, and state paths from either the default repo-local XDG-style layout or a declared single-root repo-local layout
 - [ ] **REPO-02**: `changes init` can choose the repo-local layout style using a clean, documented command shape
 - [ ] **REPO-03**: Repo-local layout selection rules are deterministic when no existing repo-local layout artifacts are present
 
@@ -25,7 +25,7 @@
 
 ### Migration and Schema Metadata
 
-- [ ] **MIGR-01**: `changes` records structural layout schema metadata in managed layouts without rewriting it during ordinary command execution
+- [x] **MIGR-01**: `changes` records structural layout schema metadata in managed layouts without rewriting it during ordinary command execution
 - [ ] **MIGR-02**: `changes` can generate an LLM prompt for migrating between supported layouts using deterministically gathered source and destination details
 - [ ] **MIGR-03**: Migration assistance includes origin metadata, destination metadata, and any detected ambiguity or conflict signals
 - [ ] **MIGR-04**: `changes` never dual-writes to origin and destination layouts during normal operation
@@ -59,16 +59,16 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GLBL-01 | Phase 2 | Pending |
-| GLBL-02 | Phase 2 | Pending |
+| GLBL-01 | Phase 2 | Complete |
+| GLBL-02 | Phase 2 | Complete |
 | GLBL-03 | Phase 4 | Pending |
-| REPO-01 | Phase 2 | Pending |
+| REPO-01 | Phase 2 | Complete |
 | REPO-02 | Phase 4 | Pending |
 | REPO-03 | Phase 2 | Pending |
 | AUTH-01 | Phase 3 | Pending |
 | AUTH-02 | Phase 3 | Pending |
 | AUTH-03 | Phase 4 | Pending |
-| MIGR-01 | Phase 2 | Pending |
+| MIGR-01 | Phase 2 | Complete |
 | MIGR-02 | Phase 4 | Pending |
 | MIGR-03 | Phase 4 | Pending |
 | MIGR-04 | Phase 3 | Pending |

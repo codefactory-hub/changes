@@ -92,7 +92,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Layout Proposal | 2/2 | Complete | 2026-04-06 |
-| 2. Resolution Core | 0/2 | Not started | - |
+| 2. Resolution Core | 1/2 | In Progress | - |
 | 3. Authority and Safety | 0/2 | Not started | - |
 | 4. Command UX and Migration Help | 0/2 | Not started | - |
 | 5. Rollout Verification | 0/2 | Not started | - |

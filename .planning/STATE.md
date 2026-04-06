@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_execute
-stopped_at: Phase 2 plans verified
-last_updated: "2026-04-06T22:22:28Z"
-last_activity: 2026-04-06 -- Phase 2 plans created and verified
+status: executing
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-04-06T22:40:17.019Z"
+last_activity: 2026-04-06
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 4
-  completed_plans: 2
-  percent: 20
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 2: Resolution Core planned and verified
+**Current focus:** Phase 02 — resolution-core
 
 ## Current Position
 
-Phase: 2 of 5 (Resolution Core)
-Plan: 2 of 2 in current phase
+Phase: 02 (resolution-core) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-04-06 -- Phase 2 plans created and verified
+Last activity: 2026-04-06
 
 Progress: [██░░░░░░░░] 20%
 
@@ -51,6 +51,8 @@ Progress: [██░░░░░░░░] 20%
 - Last 5 plans: 3 min, 3 min
 - Trend: Stable
 
+| Phase 02 P01 | 10m17s | 2 tasks | 5 files |
+
 ## Accumulated Context
 
 ### Decisions
@@ -64,6 +66,9 @@ Recent decisions affecting current work:
 - [Phase 01-layout-proposal]: Kept changes doctor as the only inspection and migration-brief surface, with concise default output and richer explain/json tiers.
 - [Phase 01-layout-proposal]: Phase 1 now uses a requirement and decision matrix as the explicit traceability artifact before implementation.
 - [Phase 01-layout-proposal]: Phase 2 entry is governed by exact rule sentences repeated across the proposal bundle and the implementation gate.
+- [Phase 02]: ResolveAll is the primary resolver entry point and per-scope helpers delegate to it.
+- [Phase 02]: Invalid layouts are classified into structured resolver statuses instead of ordinary-operation errors.
+- [Phase 02]: Path comparison canonicalizes the nearest existing ancestor so symlinked roots and unresolved descendants compare safely.
 
 ### Pending Todos
 
@@ -75,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-06T22:22:28Z
-Stopped at: Phase 2 plans verified
-Resume file: .planning/phases/02-resolution-core/02-01-PLAN.md
+Last session: 2026-04-06T22:40:17.015Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
