@@ -3,6 +3,8 @@ package render
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"text/template"
@@ -11,7 +13,6 @@ import (
 
 	"github.com/example/changes/internal/config"
 	"github.com/example/changes/internal/releases"
-	"github.com/example/changes/internal/templates"
 )
 
 type TemplatePack struct {
@@ -50,7 +51,7 @@ type releaseTemplateData struct {
 }
 
 func New(repoRoot string, cfg config.Config, profileName string) (*Renderer, error) {
-	profile, err := cfg.RenderProfile(profileName)
+	profile, err := resolveProfile(cfg, profileName)
 	if err != nil {
 		return nil, err
 	}
@@ -76,11 +77,11 @@ func New(repoRoot string, cfg config.Config, profileName string) (*Renderer, err
 		"formatDateRPM": formatDateRPM,
 	}
 
-	entryBody, err := templates.LoadTemplate(repoRoot, cfg, pack.EntryTemplate)
+	entryBody, err := loadTemplate(repoRoot, cfg, pack.EntryTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("load entry template: %w", err)
 	}
-	releaseBody, err := templates.LoadTemplate(repoRoot, cfg, pack.ReleaseTemplate)
+	releaseBody, err := loadTemplate(repoRoot, cfg, pack.ReleaseTemplate)
 	if err != nil {
 		return nil, fmt.Errorf("load release template: %w", err)
 	}
@@ -100,31 +101,6 @@ func New(repoRoot string, cfg config.Config, profileName string) (*Renderer, err
 		entryTemplate:   entryTemplate,
 		releaseTemplate: releaseTemplate,
 	}, nil
-}
-
-func AvailablePacks(cfg config.Config) []TemplatePack {
-	names := make([]string, 0, len(cfg.RenderProfiles))
-	for name := range cfg.RenderProfiles {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-
-	packs := make([]TemplatePack, 0, len(names))
-	for _, name := range names {
-		profile := cfg.RenderProfiles[name]
-		packs = append(packs, TemplatePack{
-			Name:            name,
-			Description:     profile.Description,
-			Mode:            profile.Mode,
-			DocumentHeader:  profile.DocumentHeader,
-			ReleaseTemplate: profile.ReleaseTemplate,
-			EntryTemplate:   profile.EntryTemplate,
-			MaxChars:        profile.MaxChars,
-			OmissionNotice:  profile.OmissionNotice,
-			Metadata:        cloneMetadata(profile.Metadata),
-		})
-	}
-	return packs
 }
 
 func (r *Renderer) Render(doc Document) (string, error) {
@@ -259,15 +235,20 @@ func formatDateRPM(value time.Time) string {
 	return value.UTC().Format("Mon Jan 02 2006")
 }
 
-func cloneMetadata(in map[string]string) map[string]string {
-	if in == nil {
-		return nil
+func loadTemplate(repoRoot string, cfg config.Config, name string) (string, error) {
+	path := config.TemplatesDir(repoRoot, cfg)
+	fullPath := filepath.Join(path, name)
+	if raw, err := os.ReadFile(fullPath); err == nil {
+		return string(raw), nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("read template %s: %w", fullPath, err)
 	}
-	out := make(map[string]string, len(in))
-	for key, value := range in {
-		out[key] = value
+
+	body, ok := BuiltinTemplateFiles()[name]
+	if !ok {
+		return "", fmt.Errorf("template %s is not available", name)
 	}
-	return out
+	return body, nil
 }
 
 func (p TemplatePack) metadataValue(key, fallback string) string {

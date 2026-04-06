@@ -71,59 +71,6 @@ func Default() Config {
 			StateDir:     ".local/state/changes",
 			TemplatesDir: ".local/share/changes/templates",
 		},
-		RenderProfiles: map[string]RenderProfile{
-			RenderProfileRepositoryMarkdown: {
-				Description:     "Repository changelog in Markdown generated from the stable release chain.",
-				Mode:            RenderModeReleaseChain,
-				DocumentHeader:  "# Changelog",
-				ReleaseTemplate: "repository-markdown-release.md.tmpl",
-				EntryTemplate:   "release-entry.md.tmpl",
-				MaxChars:        0,
-				OmissionNotice:  "Additional releases omitted for length.",
-			},
-			RenderProfileGitHubRelease: {
-				Description:     "Markdown release body for GitHub or GitLab releases.",
-				Mode:            RenderModeSingleRelease,
-				ReleaseTemplate: "github-release.md.tmpl",
-				EntryTemplate:   "release-entry.md.tmpl",
-				MaxChars:        4000,
-				OmissionNotice:  "Additional content omitted for length.",
-			},
-			RenderProfileTesterSummary: {
-				Description:     "Concise tester-facing release summary.",
-				Mode:            RenderModeSingleRelease,
-				ReleaseTemplate: "tester-summary-release.md.tmpl",
-				EntryTemplate:   "tester-summary-entry.md.tmpl",
-				MaxChars:        8000,
-				OmissionNotice:  "Additional content omitted for length.",
-			},
-			RenderProfileDebianChangelog: {
-				Description:     "Debian-style changelog text generated from a single release record.",
-				Mode:            RenderModeSingleRelease,
-				ReleaseTemplate: "debian-changelog.tmpl",
-				EntryTemplate:   "package-entry.tmpl",
-				MaxChars:        0,
-				OmissionNotice:  "",
-				Metadata: map[string]string{
-					"distribution":     "unstable",
-					"urgency":          "medium",
-					"maintainer_name":  "Changes Release Bot",
-					"maintainer_email": "changes@example.invalid",
-				},
-			},
-			RenderProfileRPMChangelog: {
-				Description:     "RPM-style changelog text generated from a single release record.",
-				Mode:            RenderModeSingleRelease,
-				ReleaseTemplate: "rpm-changelog.tmpl",
-				EntryTemplate:   "package-entry.tmpl",
-				MaxChars:        0,
-				OmissionNotice:  "",
-				Metadata: map[string]string{
-					"maintainer_name":  "Changes Release Bot",
-					"maintainer_email": "changes@example.invalid",
-				},
-			},
-		},
 		Versioning: VersioningConfig{
 			PublicAPI: "unstable",
 		},
@@ -194,47 +141,6 @@ func Load(repoRoot string) (Config, error) {
 
 func (c *Config) applyDefaults() {
 	defaults := Default()
-	if c.RenderProfiles == nil {
-		c.RenderProfiles = map[string]RenderProfile{}
-	}
-
-	for name, profile := range defaults.RenderProfiles {
-		current, ok := c.RenderProfiles[name]
-		if !ok {
-			c.RenderProfiles[name] = profile
-			continue
-		}
-		if current.Mode == "" {
-			current.Mode = profile.Mode
-		}
-		if current.Description == "" {
-			current.Description = profile.Description
-		}
-		if current.DocumentHeader == "" {
-			current.DocumentHeader = profile.DocumentHeader
-		}
-		if current.ReleaseTemplate == "" {
-			current.ReleaseTemplate = profile.ReleaseTemplate
-		}
-		if current.EntryTemplate == "" {
-			current.EntryTemplate = profile.EntryTemplate
-		}
-		if current.OmissionNotice == "" {
-			current.OmissionNotice = profile.OmissionNotice
-		}
-		if current.Metadata == nil && profile.Metadata != nil {
-			current.Metadata = cloneMetadata(profile.Metadata)
-		}
-		for key, value := range profile.Metadata {
-			if current.Metadata == nil {
-				current.Metadata = map[string]string{}
-			}
-			if _, ok := current.Metadata[key]; !ok {
-				current.Metadata[key] = value
-			}
-		}
-		c.RenderProfiles[name] = current
-	}
 
 	if strings.TrimSpace(c.Versioning.PublicAPI) == "" {
 		c.Versioning.PublicAPI = defaults.Versioning.PublicAPI
@@ -242,21 +148,13 @@ func (c *Config) applyDefaults() {
 }
 
 func (c Config) Validate() error {
-	if c.RenderProfiles == nil || len(c.RenderProfiles) == 0 {
-		return fmt.Errorf("config: render_profiles must define at least one profile")
-	}
-
 	for name, profile := range c.RenderProfiles {
 		switch profile.Mode {
 		case RenderModeSingleRelease, RenderModeReleaseChain:
+		case "":
+			// Empty fields are allowed in repo overrides and resolved later.
 		default:
 			return fmt.Errorf("config: render profile %s has unsupported mode %q", name, profile.Mode)
-		}
-		if strings.TrimSpace(profile.ReleaseTemplate) == "" {
-			return fmt.Errorf("config: render profile %s is missing release_template", name)
-		}
-		if strings.TrimSpace(profile.EntryTemplate) == "" {
-			return fmt.Errorf("config: render profile %s is missing entry_template", name)
 		}
 		if profile.MaxChars < 0 {
 			return fmt.Errorf("config: render profile %s max_chars must be >= 0", name)
@@ -270,14 +168,6 @@ func (c Config) Validate() error {
 	}
 
 	return nil
-}
-
-func (c Config) RenderProfile(name string) (RenderProfile, error) {
-	profile, ok := c.RenderProfiles[name]
-	if !ok {
-		return RenderProfile{}, fmt.Errorf("render profile %q is not configured", name)
-	}
-	return profile, nil
 }
 
 func Write(path string, cfg Config) error {
@@ -304,15 +194,4 @@ func joinKeys(keys []toml.Key) string {
 		parts = append(parts, key.String())
 	}
 	return strings.Join(parts, ", ")
-}
-
-func cloneMetadata(in map[string]string) map[string]string {
-	if in == nil {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
 }

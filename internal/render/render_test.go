@@ -3,6 +3,7 @@ package render
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/example/changes/internal/config"
 	"github.com/example/changes/internal/fragments"
 	"github.com/example/changes/internal/releases"
-	"github.com/example/changes/internal/templates"
 )
 
 func TestAvailablePacksExposeBuiltInProfiles(t *testing.T) {
@@ -35,9 +35,7 @@ func TestAvailablePacksExposeBuiltInProfiles(t *testing.T) {
 func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 	repoRoot := t.TempDir()
 	cfg := config.Default()
-	if _, err := templates.EnsureDefaultFiles(repoRoot, cfg); err != nil {
-		t.Fatalf("EnsureDefaultFiles returned error: %v", err)
-	}
+	ensureBuiltinTemplates(t, repoRoot, cfg)
 
 	record := releases.ReleaseRecord{
 		Product:          "changes",
@@ -106,13 +104,10 @@ func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 func TestRenderChainDropsWholeReleaseBlocks(t *testing.T) {
 	repoRoot := t.TempDir()
 	cfg := config.Default()
-	profile := cfg.RenderProfiles[config.RenderProfileRepositoryMarkdown]
-	profile.MaxChars = 120
-	cfg.RenderProfiles[config.RenderProfileRepositoryMarkdown] = profile
-
-	if _, err := templates.EnsureDefaultFiles(repoRoot, cfg); err != nil {
-		t.Fatalf("EnsureDefaultFiles returned error: %v", err)
+	cfg.RenderProfiles = map[string]config.RenderProfile{
+		config.RenderProfileRepositoryMarkdown: {MaxChars: 120},
 	}
+	ensureBuiltinTemplates(t, repoRoot, cfg)
 
 	renderer, err := New(repoRoot, cfg, config.RenderProfileRepositoryMarkdown)
 	if err != nil {
@@ -151,9 +146,7 @@ func TestRenderChainDropsWholeReleaseBlocks(t *testing.T) {
 func TestRepoLocalTemplateOverridesBuiltInPack(t *testing.T) {
 	repoRoot := t.TempDir()
 	cfg := config.Default()
-	if _, err := templates.EnsureDefaultFiles(repoRoot, cfg); err != nil {
-		t.Fatalf("EnsureDefaultFiles returned error: %v", err)
-	}
+	ensureBuiltinTemplates(t, repoRoot, cfg)
 
 	override := "## Overridden {{ .Release.Version }}\n"
 	overridePath := filepath.Join(config.TemplatesDir(repoRoot, cfg), "github-release.md.tmpl")
@@ -175,5 +168,26 @@ func TestRepoLocalTemplateOverridesBuiltInPack(t *testing.T) {
 	}
 	if !strings.Contains(output, "## Overridden 0.2.0") {
 		t.Fatalf("render should use repo-local template override: %s", output)
+	}
+}
+
+func ensureBuiltinTemplates(t *testing.T, repoRoot string, cfg config.Config) {
+	t.Helper()
+
+	dir := config.TemplatesDir(repoRoot, cfg)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir templates dir: %v", err)
+	}
+
+	names := make([]string, 0, len(BuiltinTemplateFiles()))
+	for name := range BuiltinTemplateFiles() {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(BuiltinTemplateFiles()[name]), 0o644); err != nil {
+			t.Fatalf("write template %s: %v", name, err)
+		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/example/changes/internal/config"
 	"github.com/example/changes/internal/fragments"
 )
 
@@ -42,7 +43,6 @@ func (a *App) runCreate(ctx context.Context, args []string) error {
 		a.printHelp([]string{"create"})
 		return nil
 	}
-	a.promptIn = nil
 
 	options, err := parseCreateOptions(args)
 	if err != nil {
@@ -50,56 +50,73 @@ func (a *App) runCreate(ctx context.Context, args []string) error {
 	}
 
 	if a.isTTY() {
+		prompts := a.newPromptReader()
 		if strings.TrimSpace(options.Name) == "" {
-			options.Name, err = a.promptOptionalLine("Name stem (optional): ")
+			options.Name, err = a.promptOptionalLine(prompts, "Name stem (optional): ")
 			if err != nil {
 				return err
 			}
 		}
-	}
+		if err := validateCreateType(options.Type); err != nil {
+			return err
+		}
+		if err := validateSemanticLever("public_api", options.PublicAPI, "add", "change", "remove"); err != nil {
+			return err
+		}
+		if err := validateSemanticLever("behavior", options.Behavior, "new", "fix", "redefine"); err != nil {
+			return err
+		}
+		if err := validateSemanticLever("dependency", options.Dependency, "refresh", "relax", "restrict"); err != nil {
+			return err
+		}
+		if err := validateSemanticLever("runtime", options.Runtime, "expand", "reduce"); err != nil {
+			return err
+		}
 
-	if err := validateCreateType(options.Type); err != nil {
-		return err
-	}
-	if err := validateSemanticLever("public_api", options.PublicAPI, "add", "change", "remove"); err != nil {
-		return err
-	}
-	if err := validateSemanticLever("behavior", options.Behavior, "new", "fix", "redefine"); err != nil {
-		return err
-	}
-	if err := validateSemanticLever("dependency", options.Dependency, "refresh", "relax", "restrict"); err != nil {
-		return err
-	}
-	if err := validateSemanticLever("runtime", options.Runtime, "expand", "reduce"); err != nil {
-		return err
-	}
+		if options.Edit {
+			options, err = a.editCreateOptions(options)
+			if err != nil {
+				return err
+			}
+		} else if strings.TrimSpace(options.Body) == "" {
+			options.Body, err = a.promptOptionalLine(prompts, "Body (single line; use --edit for longer Markdown): ")
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(options.Body) == "" {
+				return fmt.Errorf("create: fragment body is required")
+			}
+		}
+	} else {
+		if err := validateCreateType(options.Type); err != nil {
+			return err
+		}
+		if err := validateSemanticLever("public_api", options.PublicAPI, "add", "change", "remove"); err != nil {
+			return err
+		}
+		if err := validateSemanticLever("behavior", options.Behavior, "new", "fix", "redefine"); err != nil {
+			return err
+		}
+		if err := validateSemanticLever("dependency", options.Dependency, "refresh", "relax", "restrict"); err != nil {
+			return err
+		}
+		if err := validateSemanticLever("runtime", options.Runtime, "expand", "reduce"); err != nil {
+			return err
+		}
 
-	if options.Edit {
-		if !a.isTTY() {
+		if options.Edit {
 			return fmt.Errorf("create: --edit requires an interactive terminal")
 		}
-		options, err = a.editCreateOptions(options)
-		if err != nil {
-			return err
-		}
-	} else if strings.TrimSpace(options.Body) == "" {
-		if !a.isTTY() {
+		if strings.TrimSpace(options.Body) == "" {
 			return fmt.Errorf("create: body is required; pass it as the trailing argument, use --body, or run with --edit")
 		}
-		options.Body, err = a.promptOptionalLine("Body (single line; use --edit for longer Markdown): ")
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(options.Body) == "" {
-			return fmt.Errorf("create: fragment body is required")
-		}
 	}
 
-	if err := validateCreateType(options.Type); err != nil {
+	repoRoot, err := a.repoRoot(ctx)
+	if err != nil {
 		return err
 	}
-
-	repoRoot, cfg, err := a.loadConfig(ctx)
+	cfg, err := config.Load(repoRoot)
 	if err != nil {
 		return err
 	}
@@ -209,9 +226,8 @@ func validateSemanticLever(field, raw string, allowed ...string) error {
 	return fmt.Errorf("create: %s must be one of %s", field, strings.Join(allowed, ", "))
 }
 
-func (a *App) promptOptionalLine(label string) (string, error) {
+func (a *App) promptOptionalLine(reader *bufio.Reader, label string) (string, error) {
 	_, _ = fmt.Fprint(a.Stderr, label)
-	reader := a.promptReader()
 	line, err := reader.ReadString('\n')
 	if err != nil && err != io.EOF {
 		return "", fmt.Errorf("read input: %w", err)
@@ -304,13 +320,8 @@ func (a *App) stdinReader() io.Reader {
 	return os.Stdin
 }
 
-func (a *App) promptReader() *bufio.Reader {
-	if reader, ok := a.promptIn.(*bufio.Reader); ok {
-		return reader
-	}
-	reader := bufio.NewReader(a.stdinReader())
-	a.promptIn = reader
-	return reader
+func (a *App) newPromptReader() *bufio.Reader {
+	return bufio.NewReader(a.stdinReader())
 }
 
 func (a *App) isTTY() bool {

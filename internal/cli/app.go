@@ -7,17 +7,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
+	appsvc "github.com/example/changes/internal/app"
 	"github.com/example/changes/internal/config"
-	"github.com/example/changes/internal/fragments"
-	"github.com/example/changes/internal/releases"
 	"github.com/example/changes/internal/render"
 	"github.com/example/changes/internal/reporoot"
 	"github.com/example/changes/internal/semverpolicy"
-	"github.com/example/changes/internal/templates"
 	"github.com/example/changes/internal/versioning"
 )
 
@@ -29,7 +26,6 @@ type App struct {
 	Random   io.Reader
 	IsTTY    func() bool
 	EditFile func(path string) error
-	promptIn io.Reader
 }
 
 func NewApp(stdout, stderr io.Writer) *App {
@@ -84,13 +80,21 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 		a.printHelp([]string{"init"})
 		return nil
 	}
-	a.promptIn = nil
+
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	var currentVersionArg string
-	fs.StringVar(&currentVersionArg, "current-version", "", "Current released version or unreleased")
+	var currentVersion string
+	fs.StringVar(&currentVersion, "current-version", "", "Current released version or unreleased")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	if strings.TrimSpace(currentVersion) == "" && a.isTTY() {
+		answer, err := a.promptOptionalLine(a.newPromptReader(), "Current released version [unreleased]: ")
+		if err != nil {
+			return err
+		}
+		currentVersion = strings.TrimSpace(answer)
 	}
 
 	repoRoot, err := a.repoRoot(ctx)
@@ -98,94 +102,19 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 		return err
 	}
 
-	cfg := config.Default()
-	if _, err := os.Stat(config.RepoConfigPath(repoRoot)); err == nil {
-		cfg, err = config.Load(repoRoot)
-		if err != nil {
-			return err
-		}
-	}
-	if cfg.Project.Name == "" {
-		cfg.Project.Name = filepath.Base(repoRoot)
-	}
-	if err := ensureBootstrapArtifactsAbsent(repoRoot, cfg); err != nil {
-		return err
-	}
-
-	currentVersionLabel, currentVersion, err := a.resolveInitCurrentVersion(currentVersionArg)
+	result, err := appsvc.Initialize(ctx, appsvc.InitializeRequest{
+		RepoRoot:       repoRoot,
+		CurrentVersion: currentVersion,
+		Now:            a.Now().UTC().Truncate(time.Second),
+		Random:         a.Random,
+	})
 	if err != nil {
 		return err
 	}
 
-	for _, dir := range []string{
-		config.FragmentsDir(repoRoot, cfg),
-		config.ReleasesDir(repoRoot, cfg),
-		config.PromptsDir(repoRoot, cfg),
-		config.TemplatesDir(repoRoot, cfg),
-		config.StateDir(repoRoot, cfg),
-	} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("create directory %s: %w", dir, err)
-		}
-	}
-
-	if _, err := os.Stat(config.RepoConfigPath(repoRoot)); os.IsNotExist(err) {
-		if err := config.Write(config.RepoConfigPath(repoRoot), cfg); err != nil {
-			return err
-		}
-	}
-
-	if _, err := templates.EnsureDefaultFiles(repoRoot, cfg); err != nil {
-		return err
-	}
-
-	changelogPath := config.ChangelogPath(repoRoot, cfg)
-	if _, err := os.Stat(changelogPath); os.IsNotExist(err) {
-		if err := os.WriteFile(changelogPath, []byte("# Changelog\n"), 0o644); err != nil {
-			return fmt.Errorf("write starter changelog: %w", err)
-		}
-	}
-
-	if err := ensureGitignore(repoRoot); err != nil {
-		return err
-	}
-
-	var adoptionFragment *fragments.Fragment
-	var adoptionRecord *releases.ReleaseRecord
-	var adoptionRecordPath string
-	records, err := releases.List(repoRoot, cfg)
-	if err != nil {
-		return err
-	}
-	if currentVersion != nil && releases.LatestFinalHeadForProduct(records, cfg.Project.Name) == nil {
-		fragment, record, recordPath, err := a.createAdoptionBootstrap(repoRoot, cfg, *currentVersion, records)
-		if err != nil {
-			return err
-		}
-		adoptionFragment = &fragment
-		adoptionRecord = &record
-		adoptionRecordPath = recordPath
-	}
-
-	_, _ = fmt.Fprintf(a.Stdout, "initialized %s\n", repoRoot)
-	if adoptionRecord != nil {
-		promptPath, err := writeHistoryImportPrompt(repoRoot, cfg, historyImportPromptData{
-			Product:             cfg.Project.Name,
-			CurrentVersionLabel: currentVersionLabel,
-			ChangelogPath:       config.ChangelogPath(repoRoot, cfg),
-			ConfigPath:          config.RepoConfigPath(repoRoot),
-			FragmentsDir:        config.FragmentsDir(repoRoot, cfg),
-			ReleasesDir:         config.ReleasesDir(repoRoot, cfg),
-			TemplatesDir:        config.TemplatesDir(repoRoot, cfg),
-			PromptPath:          config.HistoryImportPromptPath(repoRoot, cfg),
-			AdoptionRecordPath:  adoptionRecordPath,
-			AdoptionFragment:    adoptionFragment,
-			AdoptionRecord:      adoptionRecord,
-		})
-		if err != nil {
-			return err
-		}
-		_, _ = fmt.Fprintf(a.Stdout, "next step: review %s to replace or refine the standard adoption history.\n", repoRelativePath(repoRoot, promptPath))
+	_, _ = fmt.Fprintf(a.Stdout, "initialized %s\n", result.RepoRoot)
+	if strings.TrimSpace(result.PromptPath) != "" {
+		_, _ = fmt.Fprintf(a.Stdout, "next step: review %s to replace or refine the standard adoption history.\n", repoRelativePath(result.RepoRoot, result.PromptPath))
 	}
 	return nil
 }
@@ -195,6 +124,7 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 		a.printHelp([]string{"status"})
 		return nil
 	}
+
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var explain bool
@@ -206,48 +136,34 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 		return fmt.Errorf("usage: changes status [--explain]")
 	}
 
-	repoRoot, cfg, err := a.loadConfig(ctx)
+	repoRoot, err := a.repoRoot(ctx)
+	if err != nil {
+		return err
+	}
+	result, err := appsvc.Status(ctx, appsvc.StatusRequest{RepoRoot: repoRoot})
 	if err != nil {
 		return err
 	}
 
-	allFragments, records, err := a.loadState(repoRoot, cfg)
-	if err != nil {
-		return err
-	}
-
-	product := cfg.Project.Name
-	unreleased, err := releases.UnreleasedFinalFragments(allFragments, records, product)
-	if err != nil {
-		return err
-	}
-	nextStable, err := recommendedStableVersion(cfg, records, product, unreleased)
-	if err != nil {
-		return err
-	}
-	policy, err := recommendationPolicy(cfg, unreleased)
-	if err != nil {
-		return err
-	}
-
-	_, _ = fmt.Fprintf(a.Stdout, "Unreleased fragments: %d\n", len(unreleased))
-	_, _ = fmt.Fprintf(a.Stdout, "Recommended bump: %s\n", policy.SuggestedBump)
-	_, _ = fmt.Fprintf(a.Stdout, "Recommended next stable: %s\n", nextStable.String())
+	_, _ = fmt.Fprintf(a.Stdout, "Current version: %s\n", result.CurrentVersionBaseline.String())
+	_, _ = fmt.Fprintf(a.Stdout, "Current version source: %s\n", result.CurrentVersionSource)
+	_, _ = fmt.Fprintf(a.Stdout, "Unreleased fragments: %d\n", len(result.PendingFragments))
+	_, _ = fmt.Fprintf(a.Stdout, "Recommended bump: %s\n", result.Recommendation.SuggestedBump)
+	_, _ = fmt.Fprintf(a.Stdout, "Recommended next stable: %s\n", result.RecommendedNextStable.String())
 	if explain {
-		renderRecommendationExplanation(a.Stdout, policy)
+		renderRecommendationExplanation(a.Stdout, result.Recommendation)
 	}
 
-	prereleaseHeads := releases.PrereleaseHeads(records, product)
-	if len(prereleaseHeads) > 0 {
+	if len(result.PrereleaseHeads) > 0 {
 		_, _ = fmt.Fprintln(a.Stdout, "Active prerelease heads:")
-		for _, head := range prereleaseHeads {
+		for _, head := range result.PrereleaseHeads {
 			_, _ = fmt.Fprintf(a.Stdout, "- %s -> %s\n", head.Version, head.TargetVersion())
 		}
 	}
 
-	if len(unreleased) > 0 {
+	if len(result.PendingFragments) > 0 {
 		_, _ = fmt.Fprintln(a.Stdout, "Pending fragments:")
-		for _, item := range unreleased {
+		for _, item := range result.PendingFragments {
 			_, _ = fmt.Fprintf(a.Stdout, "- %s [%s] %s\n", item.ID, item.Type, item.BodyPreview())
 		}
 	}
@@ -260,6 +176,7 @@ func (a *App) runRelease(ctx context.Context, args []string) error {
 		a.printHelp([]string{"release"})
 		return nil
 	}
+
 	fs := flag.NewFlagSet("release", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -309,68 +226,39 @@ func (a *App) runRelease(ctx context.Context, args []string) error {
 		return fmt.Errorf("release: non-interactive use requires --accept or --override")
 	}
 
-	repoRoot, cfg, err := a.loadConfig(ctx)
+	repoRoot, err := a.repoRoot(ctx)
 	if err != nil {
 		return err
 	}
 
-	allFragments, records, err := a.loadState(repoRoot, cfg)
+	plan, err := appsvc.PlanRelease(ctx, appsvc.ReleasePlanRequest{
+		RepoRoot:         repoRoot,
+		RequestedVersion: version,
+		RequestedPre:     pre,
+		RequestedBump:    bump,
+		Now:              a.Now(),
+	})
 	if err != nil {
 		return err
 	}
 
-	product := cfg.Project.Name
-	unreleased, err := releases.UnreleasedFinalFragments(allFragments, records, product)
-	if err != nil {
-		return err
-	}
-	policy, err := recommendationPolicy(cfg, unreleased)
-	if err != nil {
-		return err
-	}
-	releaseVersion, releaseBump, err := selectReleaseVersion(cfg, records, product, allFragments, version, pre, bump)
-	if err != nil {
-		return err
-	}
-	if accept && releaseBump == versioning.BumpNone {
+	if accept && plan.ChosenBump == versioning.BumpNone {
 		return fmt.Errorf("release: no version bump was inferred; use --override --bump or --override --version")
 	}
+
 	if a.isTTY() && !accept && !override {
-		releaseVersion, releaseBump, err = a.confirmReleaseSelection(releaseVersion, releaseBump, pre, unreleased, policy, cfg, records, product)
+		plan, err = a.confirmReleaseSelection(ctx, plan, pre)
 		if err != nil {
 			return err
 		}
 	}
 
-	selected, err := selectReleaseFragments(allFragments, records, product, releaseVersion)
+	result, err := appsvc.CommitRelease(ctx, plan)
 	if err != nil {
 		return err
 	}
 
-	ids := make([]string, 0, len(selected))
-	for _, item := range selected {
-		ids = append(ids, item.ID)
-	}
-
-	parentVersion := selectParentVersion(records, product, releaseVersion)
-	record := releases.ReleaseRecord{
-		Product:          product,
-		Version:          releaseVersion.String(),
-		ParentVersion:    parentVersion,
-		CreatedAt:        a.Now().UTC().Truncate(time.Second),
-		AddedFragmentIDs: ids,
-	}
-
-	if err := releases.ValidateSet(append(slices.Clone(records), record)); err != nil {
-		return err
-	}
-
-	path, err := releases.Write(repoRoot, cfg, record)
-	if err != nil {
-		return err
-	}
-
-	_, _ = fmt.Fprintf(a.Stdout, "%s\n", path)
+	_, _ = fmt.Fprintf(a.Stdout, "%s\n", result.Path)
 	return nil
 }
 
@@ -412,71 +300,30 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 		return err
 	}
 
-	selectorCount := 0
-	if strings.TrimSpace(version) != "" {
-		selectorCount++
-	}
-	if strings.TrimSpace(recordPath) != "" {
-		selectorCount++
-	}
-	if latest {
-		selectorCount++
-	}
-	if selectorCount != 1 {
-		return fmt.Errorf("render: provide exactly one of --version, --record, or --latest")
-	}
-
-	repoRoot, cfg, err := a.loadConfig(ctx)
+	repoRoot, err := a.repoRoot(ctx)
 	if err != nil {
 		return err
 	}
-
-	allFragments, records, err := a.loadState(repoRoot, cfg)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(product) == "" {
-		product = cfg.Project.Name
-	}
-
-	var record releases.ReleaseRecord
-	if strings.TrimSpace(recordPath) != "" {
-		record, err = releases.Load(recordPath)
-	} else if latest {
-		head := releases.LatestFinalHeadForProduct(records, product)
-		if head == nil {
-			return fmt.Errorf("render: no final release records exist for product %q", product)
-		}
-		record = *head
-	} else {
-		base, findErr := releases.FindBaseRecord(records, product, version)
-		if findErr != nil {
-			return findErr
-		}
-		record = *base
-	}
-
-	renderer, err := render.New(repoRoot, cfg, profile)
-	if err != nil {
-		return err
-	}
-	doc, err := selectRenderDocument(renderer.Pack(), record, records, allFragments)
-	if err != nil {
-		return err
-	}
-	content, err := renderer.Render(doc)
+	result, err := appsvc.Render(ctx, appsvc.RenderRequest{
+		RepoRoot:   repoRoot,
+		Version:    version,
+		RecordPath: recordPath,
+		Profile:    profile,
+		Product:    product,
+		Latest:     latest,
+	})
 	if err != nil {
 		return err
 	}
 
 	if strings.TrimSpace(outputPath) != "" {
-		if err := os.WriteFile(outputPath, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(outputPath, []byte(result.Content), 0o644); err != nil {
 			return fmt.Errorf("write render output: %w", err)
 		}
 		return nil
 	}
 
-	_, _ = fmt.Fprint(a.Stdout, content)
+	_, _ = fmt.Fprint(a.Stdout, result.Content)
 	return nil
 }
 
@@ -491,7 +338,11 @@ func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
 		return err
 	}
 
-	_, cfg, err := a.loadConfig(ctx)
+	repoRoot, err := a.repoRoot(ctx)
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load(repoRoot)
 	if err != nil {
 		return err
 	}
@@ -513,32 +364,6 @@ func (a *App) repoRoot(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("detect repo root: %w", err)
 	}
 	return root, nil
-}
-
-func (a *App) loadConfig(ctx context.Context) (string, config.Config, error) {
-	repoRoot, err := a.repoRoot(ctx)
-	if err != nil {
-		return "", config.Config{}, err
-	}
-
-	cfg, err := config.Load(repoRoot)
-	if err != nil {
-		return "", config.Config{}, err
-	}
-
-	return repoRoot, cfg, nil
-}
-
-func (a *App) loadState(repoRoot string, cfg config.Config) ([]fragments.Fragment, []releases.ReleaseRecord, error) {
-	allFragments, err := fragments.List(repoRoot, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	records, err := releases.List(repoRoot, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	return allFragments, records, nil
 }
 
 func (a *App) fail(err error) error {
@@ -617,7 +442,7 @@ Options:
 Usage:
   changes status [--explain]
 
-Show unreleased fragment counts, the policy-derived recommended bump, the recommended next stable version, and active prerelease heads.
+Show the current version baseline, unreleased fragment counts, the policy-derived recommended bump, the recommended next stable version, and active prerelease heads.
 `)
 	case "release":
 		body = strings.TrimSpace(`
@@ -659,138 +484,6 @@ Use "changes help" to see the available commands.
 	_, _ = fmt.Fprintln(a.Stdout, body)
 }
 
-func recommendedStableVersion(cfg config.Config, records []releases.ReleaseRecord, product string, pending []fragments.Fragment) (versioning.Version, error) {
-	policy, err := recommendationPolicy(cfg, pending)
-	if err != nil {
-		return versioning.Version{}, err
-	}
-	return nextStableForBump(cfg, records, product, policy.SuggestedBump)
-}
-
-func recommendationPolicy(cfg config.Config, pending []fragments.Fragment) (semverpolicy.Recommendation, error) {
-	return semverpolicy.Evaluate(publicAPIStability(cfg.Versioning.PublicAPI), pending), nil
-}
-
-func recommendedPreviewVersion(records []releases.ReleaseRecord, product string, target versioning.Version, label string) versioning.Version {
-	current := releases.PrereleaseVersionsForLine(records, product, target.String(), label)
-	return versioning.NextPrerelease(target, label, current)
-}
-
-func selectReleaseVersion(cfg config.Config, records []releases.ReleaseRecord, product string, allFragments []fragments.Fragment, requestedVersion, requestedPre, requestedBump string) (versioning.Version, versioning.Bump, error) {
-	if strings.TrimSpace(requestedVersion) != "" {
-		version, err := versioning.Parse(requestedVersion)
-		if err != nil {
-			return versioning.Version{}, versioning.BumpNone, err
-		}
-		return version, versioning.BumpNone, nil
-	}
-
-	pending, err := releases.UnreleasedFinalFragments(allFragments, records, product)
-	if err != nil {
-		return versioning.Version{}, versioning.BumpNone, err
-	}
-	policy, err := recommendationPolicy(cfg, pending)
-	if err != nil {
-		return versioning.Version{}, versioning.BumpNone, err
-	}
-	chosenBump := policy.SuggestedBump
-	if strings.TrimSpace(requestedBump) != "" {
-		chosenBump, err = versioning.NormalizeBump(requestedBump)
-		if err != nil {
-			return versioning.Version{}, versioning.BumpNone, err
-		}
-	}
-	target, err := nextStableForBump(cfg, records, product, chosenBump)
-	if err != nil {
-		return versioning.Version{}, versioning.BumpNone, err
-	}
-
-	if strings.TrimSpace(requestedPre) == "" {
-		return target, chosenBump, nil
-	}
-
-	return recommendedPreviewVersion(records, product, target, requestedPre), chosenBump, nil
-}
-
-func selectReleaseFragments(allFragments []fragments.Fragment, records []releases.ReleaseRecord, product string, version versioning.Version) ([]fragments.Fragment, error) {
-	var (
-		selected []fragments.Fragment
-		err      error
-	)
-
-	if version.IsPrerelease() {
-		label, _, ok := version.PrereleaseLabelNumber()
-		if !ok {
-			return nil, fmt.Errorf("unsupported prerelease format %q", version.String())
-		}
-		selected, err = releases.UnreleasedPrereleaseFragments(allFragments, records, product, version.Stable().String(), label)
-	} else {
-		selected, err = releases.UnreleasedFinalFragments(allFragments, records, product)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	if len(selected) == 0 {
-		releaseKind := "final"
-		if version.IsPrerelease() {
-			releaseKind = "prerelease"
-		}
-		return nil, fmt.Errorf("no fragments available for %s release %s", releaseKind, version.String())
-	}
-
-	slices.SortFunc(selected, func(a, b fragments.Fragment) int {
-		if !a.CreatedAt.Equal(b.CreatedAt) {
-			if a.CreatedAt.Before(b.CreatedAt) {
-				return -1
-			}
-			return 1
-		}
-		return strings.Compare(a.ID, b.ID)
-	})
-	return selected, nil
-}
-
-func selectParentVersion(records []releases.ReleaseRecord, product string, releaseVersion versioning.Version) string {
-	if releaseVersion.IsPrerelease() {
-		label, _, ok := releaseVersion.PrereleaseLabelNumber()
-		if !ok {
-			return ""
-		}
-		if head := releases.PrereleaseHead(records, product, releaseVersion.Stable().String(), label); head != nil {
-			return head.Version
-		}
-		if head := releases.LatestFinalHeadForProduct(records, product); head != nil {
-			return head.Version
-		}
-		return ""
-	}
-
-	if head := releases.LatestFinalHeadForProduct(records, product); head != nil {
-		return head.Version
-	}
-	return ""
-}
-
-func selectRenderDocument(pack render.TemplatePack, head releases.ReleaseRecord, records []releases.ReleaseRecord, allFragments []fragments.Fragment) (render.Document, error) {
-	switch pack.Mode {
-	case config.RenderModeSingleRelease:
-		bundle, err := releases.AssembleRelease(head, records, allFragments)
-		if err != nil {
-			return render.Document{}, err
-		}
-		return render.Document{Bundles: []releases.ReleaseBundle{bundle}}, nil
-	case config.RenderModeReleaseChain:
-		bundles, err := releases.AssembleReleaseLineage(head, records, allFragments)
-		if err != nil {
-			return render.Document{}, err
-		}
-		return render.Document{Bundles: bundles}, nil
-	default:
-		return render.Document{}, fmt.Errorf("render pack %q has unsupported mode %q", pack.Name, pack.Mode)
-	}
-}
-
 func renderRecommendationExplanation(w io.Writer, recommendation semverpolicy.Recommendation) {
 	_, _ = fmt.Fprintln(w, "Policy evidence:")
 	_, _ = fmt.Fprintf(w, "- Public API policy: %s\n", recommendation.Stability)
@@ -807,321 +500,55 @@ func renderRecommendationExplanation(w io.Writer, recommendation semverpolicy.Re
 	}
 }
 
-func latestStableVersion(records []releases.ReleaseRecord, product string) *versioning.Version {
-	if record := releases.LatestFinalHeadForProduct(records, product); record != nil {
-		value := versioning.MustParse(record.Version)
-		return &value
-	}
-	return nil
-}
+func (a *App) confirmReleaseSelection(ctx context.Context, plan appsvc.ReleasePlan, pre string) (appsvc.ReleasePlan, error) {
+	renderReleaseDecisionSummary(a.Stdout, plan)
 
-func nextStableForBump(cfg config.Config, records []releases.ReleaseRecord, product string, bump versioning.Bump) (versioning.Version, error) {
-	initial, err := versioning.Parse(cfg.Project.InitialVersion)
+	prompt := "Press Enter to accept the recommendation, choose patch/minor/major to override, or type cancel: "
+	if plan.ChosenBump == versioning.BumpNone {
+		prompt = "No version bump was inferred. Choose patch/minor/major to override, or type cancel: "
+	}
+
+	answer, err := a.promptOptionalLine(a.newPromptReader(), prompt)
 	if err != nil {
-		return versioning.Version{}, fmt.Errorf("parse initial version: %w", err)
-	}
-	return versioning.NextStable(latestStableVersion(records, product), initial, bump), nil
-}
-
-func publicAPIStability(raw string) semverpolicy.Stability {
-	if strings.TrimSpace(raw) == "stable" {
-		return semverpolicy.StabilityStable
-	}
-	return semverpolicy.StabilityUnstable
-}
-
-func (a *App) confirmReleaseSelection(releaseVersion versioning.Version, releaseBump versioning.Bump, pre string, pending []fragments.Fragment, policy semverpolicy.Recommendation, cfg config.Config, records []releases.ReleaseRecord, product string) (versioning.Version, versioning.Bump, error) {
-	a.promptIn = nil
-	renderReleaseDecisionSummary(a.Stdout, pending, policy, releaseVersion)
-
-	if releaseBump == versioning.BumpNone {
-		answer, err := a.promptOptionalLine("No version bump was inferred. Choose patch/minor/major to override, or type cancel: ")
-		if err != nil {
-			return versioning.Version{}, versioning.BumpNone, err
-		}
-		switch strings.TrimSpace(strings.ToLower(answer)) {
-		case "cancel":
-			return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release canceled")
-		case string(versioning.BumpPatch), string(versioning.BumpMinor), string(versioning.BumpMajor):
-			override, err := versioning.NormalizeBump(answer)
-			if err != nil {
-				return versioning.Version{}, versioning.BumpNone, err
-			}
-			target, err := nextStableForBump(cfg, records, product, override)
-			if err != nil {
-				return versioning.Version{}, versioning.BumpNone, err
-			}
-			if strings.TrimSpace(pre) != "" {
-				return recommendedPreviewVersion(records, product, target, pre), override, nil
-			}
-			return target, override, nil
-		default:
-			return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release: choose patch, minor, major, or cancel")
-		}
+		return appsvc.ReleasePlan{}, err
 	}
 
-	if strings.TrimSpace(pre) != "" {
-		answer, err := a.promptOptionalLine("Press Enter to accept the recommendation, choose patch/minor/major to override, or type cancel: ")
-		if err != nil {
-			return versioning.Version{}, versioning.BumpNone, err
-		}
-		switch strings.TrimSpace(strings.ToLower(answer)) {
-		case "":
-			return releaseVersion, releaseBump, nil
-		case "cancel":
-			return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release canceled")
-		case string(versioning.BumpPatch), string(versioning.BumpMinor), string(versioning.BumpMajor):
-			override, err := versioning.NormalizeBump(answer)
-			if err != nil {
-				return versioning.Version{}, versioning.BumpNone, err
-			}
-			target, err := nextStableForBump(cfg, records, product, override)
-			if err != nil {
-				return versioning.Version{}, versioning.BumpNone, err
-			}
-			return recommendedPreviewVersion(records, product, target, pre), override, nil
-		default:
-			return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release: choose patch, minor, major, or cancel")
-		}
-	}
-
-	answer, err := a.promptOptionalLine("Press Enter to accept the recommendation, choose patch/minor/major to override, or type cancel: ")
-	if err != nil {
-		return versioning.Version{}, versioning.BumpNone, err
-	}
 	switch strings.TrimSpace(strings.ToLower(answer)) {
 	case "":
-		return releaseVersion, releaseBump, nil
+		if plan.ChosenBump == versioning.BumpNone {
+			return appsvc.ReleasePlan{}, fmt.Errorf("release: choose patch, minor, major, or cancel")
+		}
+		return plan, nil
 	case "cancel":
-		return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release canceled")
+		return appsvc.ReleasePlan{}, fmt.Errorf("release canceled")
 	case string(versioning.BumpPatch), string(versioning.BumpMinor), string(versioning.BumpMajor):
-		override, err := versioning.NormalizeBump(answer)
-		if err != nil {
-			return versioning.Version{}, versioning.BumpNone, err
-		}
-		target, err := nextStableForBump(cfg, records, product, override)
-		if err != nil {
-			return versioning.Version{}, versioning.BumpNone, err
-		}
-		return target, override, nil
+		return appsvc.PlanRelease(ctx, appsvc.ReleasePlanRequest{
+			RepoRoot:      plan.RepoRoot,
+			RequestedPre:  pre,
+			RequestedBump: answer,
+			Now:           a.Now(),
+		})
 	default:
-		return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release: choose patch, minor, major, or cancel")
+		return appsvc.ReleasePlan{}, fmt.Errorf("release: choose patch, minor, major, or cancel")
 	}
 }
 
-func renderReleaseDecisionSummary(w io.Writer, pending []fragments.Fragment, recommendation semverpolicy.Recommendation, releaseVersion versioning.Version) {
-	_, _ = fmt.Fprintf(w, "Pending fragments: %d\n", len(pending))
-	for _, item := range pending {
+func renderReleaseDecisionSummary(w io.Writer, plan appsvc.ReleasePlan) {
+	_, _ = fmt.Fprintf(w, "Pending fragments: %d\n", len(plan.PendingFragments))
+	for _, item := range plan.PendingFragments {
 		_, _ = fmt.Fprintf(w, "- %s [%s] %s\n", item.ID, item.Type, item.BodyPreview())
 	}
-	renderRecommendationExplanation(w, recommendation)
-	if recommendation.SuggestedBump == versioning.BumpNone {
+	renderRecommendationExplanation(w, plan.Recommendation)
+	if plan.Recommendation.SuggestedBump == versioning.BumpNone {
 		_, _ = fmt.Fprintln(w, "Default release: none inferred")
 		return
 	}
-	_, _ = fmt.Fprintf(w, "Default release: %s\n", releaseVersion.String())
+	_, _ = fmt.Fprintf(w, "Default release: %s\n", plan.ChosenVersion.String())
 }
 
-type historyImportPromptData struct {
-	Product             string
-	CurrentVersionLabel string
-	ChangelogPath       string
-	ConfigPath          string
-	FragmentsDir        string
-	ReleasesDir         string
-	TemplatesDir        string
-	PromptPath          string
-	AdoptionRecordPath  string
-	AdoptionFragment    *fragments.Fragment
-	AdoptionRecord      *releases.ReleaseRecord
-}
-
-func ensureBootstrapArtifactsAbsent(repoRoot string, cfg config.Config) error {
-	paths := make([]string, 0, 3)
-	promptPath := config.HistoryImportPromptPath(repoRoot, cfg)
-	if _, err := os.Stat(promptPath); err == nil {
-		paths = append(paths, repoRelativePath(repoRoot, promptPath))
-	} else if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("check bootstrap prompt artifact: %w", err)
-	}
-
-	records, err := releases.List(repoRoot, cfg)
-	if err != nil {
-		return err
-	}
-	for _, record := range records {
-		if record.Bootstrap {
-			paths = append(paths, repoRelativePath(repoRoot, releases.RecordPath(repoRoot, cfg, record.Product, record.Version)))
-		}
-	}
-
-	allFragments, err := fragments.List(repoRoot, cfg)
-	if err != nil {
-		return err
-	}
-	for _, item := range allFragments {
-		if item.Bootstrap {
-			paths = append(paths, repoRelativePath(repoRoot, item.Path))
-		}
-	}
-
-	if len(paths) == 0 {
-		return nil
-	}
-	slices.Sort(paths)
-	return fmt.Errorf("init: bootstrap adoption artifacts already exist; review or remove them intentionally before re-running init: %s", strings.Join(paths, ", "))
-}
-
-func (a *App) resolveInitCurrentVersion(raw string) (string, *versioning.Version, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		if a.isTTY() {
-			answer, err := a.promptOptionalLine("Current released version [unreleased]: ")
-			if err != nil {
-				return "", nil, err
-			}
-			value = strings.TrimSpace(answer)
-		}
-		if value == "" {
-			value = "unreleased"
-		}
-	}
-
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	switch normalized {
-	case "", "unreleased", "0.0.0":
-		return "unreleased", nil, nil
-	}
-
-	parsed, err := versioning.Parse(value)
-	if err != nil {
-		return "", nil, fmt.Errorf("init: --current-version must be a stable semver or unreleased: %w", err)
-	}
-	if parsed.IsPrerelease() || parsed.BuildMetadata != "" {
-		return "", nil, fmt.Errorf("init: --current-version must be a stable semver or unreleased")
-	}
-	return parsed.String(), &parsed, nil
-}
-
-func (a *App) createAdoptionBootstrap(repoRoot string, cfg config.Config, currentVersion versioning.Version, existing []releases.ReleaseRecord) (fragments.Fragment, releases.ReleaseRecord, string, error) {
-	body := fmt.Sprintf(
-		"This repository adopted `changes` at version %s.\n\nThis entry establishes the release-history boundary for `changes`. Historical releases before %s may be reconstructed or refined later.",
-		currentVersion.String(),
-		currentVersion.String(),
-	)
-	item, err := fragments.Create(repoRoot, cfg, a.Now(), a.Random, fragments.NewInput{
-		NameStem:  "changes-adoption",
-		Type:      "changed",
-		Bootstrap: true,
-		Body:      body,
-	})
-	if err != nil {
-		return fragments.Fragment{}, releases.ReleaseRecord{}, "", err
-	}
-
-	record := releases.ReleaseRecord{
-		Product:          cfg.Project.Name,
-		Version:          currentVersion.String(),
-		Bootstrap:        true,
-		CreatedAt:        a.Now().UTC().Truncate(time.Second),
-		AddedFragmentIDs: []string{item.ID},
-		Summary:          fmt.Sprintf("Adopted `changes` metadata at version %s.", currentVersion.String()),
-	}
-	if err := releases.ValidateSet(append(slices.Clone(existing), record)); err != nil {
-		_ = os.Remove(item.Path)
-		return fragments.Fragment{}, releases.ReleaseRecord{}, "", err
-	}
-	path, err := releases.Write(repoRoot, cfg, record)
-	if err != nil {
-		_ = os.Remove(item.Path)
-		return fragments.Fragment{}, releases.ReleaseRecord{}, "", err
-	}
-	return item, record, path, nil
-}
-
-func writeHistoryImportPrompt(repoRoot string, cfg config.Config, data historyImportPromptData) (string, error) {
-	path := config.HistoryImportPromptPath(repoRoot, cfg)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("create prompt directory: %w", err)
-	}
-	if err := os.WriteFile(path, []byte(renderHistoryImportPrompt(repoRoot, data)), 0o644); err != nil {
-		return "", fmt.Errorf("write history-import prompt: %w", err)
-	}
-	return path, nil
-}
-
-func renderHistoryImportPrompt(repoRoot string, data historyImportPromptData) string {
-	var builder strings.Builder
-	builder.WriteString("# Release History Import Prompt for `changes`\n\n")
-	builder.WriteString("You are helping migrate historical release history into the `changes` data model for this repository.\n\n")
-	builder.WriteString("## Repo-specific context\n")
-	builder.WriteString(fmt.Sprintf("- Product name: `%s`\n", data.Product))
-	builder.WriteString(fmt.Sprintf("- Current version supplied during `changes init`: `%s`\n", data.CurrentVersionLabel))
-	builder.WriteString(fmt.Sprintf("- Config file: `%s`\n", repoRelativePath(repoRoot, data.ConfigPath)))
-	builder.WriteString(fmt.Sprintf("- Fragments directory: `%s`\n", repoRelativePath(repoRoot, data.FragmentsDir)))
-	builder.WriteString(fmt.Sprintf("- Releases directory: `%s`\n", repoRelativePath(repoRoot, data.ReleasesDir)))
-	builder.WriteString(fmt.Sprintf("- Templates directory: `%s`\n", repoRelativePath(repoRoot, data.TemplatesDir)))
-	builder.WriteString(fmt.Sprintf("- Changelog path: `%s`\n", repoRelativePath(repoRoot, data.ChangelogPath)))
-	builder.WriteString(fmt.Sprintf("- Prompt file: `%s`\n", repoRelativePath(repoRoot, data.PromptPath)))
-	if data.AdoptionRecord != nil && data.AdoptionFragment != nil {
-		builder.WriteString(fmt.Sprintf("- Standard adoption release exists: yes (`%s`)\n", data.AdoptionRecord.Version))
-		builder.WriteString(fmt.Sprintf("- Adoption release record path: `%s`\n", repoRelativePath(repoRoot, data.AdoptionRecordPath)))
-		builder.WriteString(fmt.Sprintf("- Adoption fragment path: `%s`\n", repoRelativePath(repoRoot, data.AdoptionFragment.Path)))
-	} else {
-		builder.WriteString("- Standard adoption release exists: no\n")
-	}
-
-	builder.WriteString("\n## `changes` model\n")
-	builder.WriteString("- Fragments are Markdown files with TOML front matter stored under the fragments directory.\n")
-	builder.WriteString("- Release records are TOML files stored under the releases directory.\n")
-	builder.WriteString("- A base release record selects fragment IDs and establishes lineage with `parent_version`.\n")
-	builder.WriteString("- Rendered changelogs and release notes are generated from fragments plus release records.\n")
-
-	builder.WriteString("\n## Task\n")
-	builder.WriteString("Investigate the repository's existing evidence, such as git history, tags, changelog content, or prior release notes, and decide what historical release records and fragments should exist before the current adoption point.\n")
-	builder.WriteString("Create or revise historical fragments and release records so the repository's pre-adoption release history is represented intentionally and coherently.\n")
-	if data.AdoptionRecord != nil && data.AdoptionFragment != nil {
-		builder.WriteString("A standard adoption release and fragment already exist as a placeholder starting point. Replace or refine that bootstrap history intentionally rather than layering duplicate history on top of it.\n")
-	}
-
-	builder.WriteString("\n## Constraints\n")
-	builder.WriteString("- Do not invent unsupported semantics or rewrite history casually.\n")
-	builder.WriteString("- Preserve valid `changes` file formats and release lineage.\n")
-	builder.WriteString("- Prefer explicit release records and fragments over vague summaries.\n")
-	builder.WriteString("- If evidence is incomplete, be clear about uncertainty instead of fabricating precision.\n")
-	builder.WriteString("- Do not change templates or config unless they are directly relevant to representing release history.\n")
-	return builder.String()
-}
 func repoRelativePath(repoRoot, path string) string {
 	if rel, err := filepath.Rel(repoRoot, path); err == nil {
 		return rel
 	}
 	return path
-}
-
-func ensureGitignore(repoRoot string) error {
-	path := filepath.Join(repoRoot, ".gitignore")
-	entry := "/.local/state/"
-
-	raw, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read .gitignore: %w", err)
-	}
-
-	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
-	for _, line := range lines {
-		if strings.TrimSpace(line) == entry {
-			return nil
-		}
-	}
-
-	if len(lines) == 1 && lines[0] == "" {
-		lines = nil
-	}
-	lines = append(lines, entry)
-	body := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		return fmt.Errorf("write .gitignore: %w", err)
-	}
-	return nil
 }

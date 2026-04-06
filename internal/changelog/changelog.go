@@ -13,9 +13,13 @@ import (
 func Rebuild(repoRoot string, cfg config.Config, allFragments []fragments.Fragment, records []releases.ReleaseRecord) (string, error) {
 	head := releases.LatestFinalHeadForProduct(records, cfg.Project.Name)
 	if head == nil {
-		pack, err := cfg.RenderProfile(config.RenderProfileRepositoryMarkdown)
+		profiles, err := render.ResolveProfiles(cfg)
 		if err != nil {
 			return "", err
+		}
+		pack, ok := profiles[config.RenderProfileRepositoryMarkdown]
+		if !ok {
+			return "", fmt.Errorf("render profile %q is not configured", config.RenderProfileRepositoryMarkdown)
 		}
 		if pack.DocumentHeader == "" {
 			return "", nil
