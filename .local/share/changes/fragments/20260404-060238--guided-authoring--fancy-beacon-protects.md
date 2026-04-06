@@ -1,6 +1,7 @@
 +++
 type = "changed"
-bump = "major"
+public_api = "change"
+behavior = "new"
 breaking = true
 +++
 
