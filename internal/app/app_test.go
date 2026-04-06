@@ -46,6 +46,80 @@ func TestInitializeUnreleasedCreatesNoBootstrapArtifacts(t *testing.T) {
 	}
 }
 
+func TestInitializeUsesSelectedRepoLayoutDefaults(t *testing.T) {
+	repoRoot := t.TempDir()
+	now := time.Date(2026, 4, 6, 12, 5, 0, 0, time.UTC)
+
+	if _, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot:        repoRoot,
+		RequestedLayout: "home",
+		Now:             now,
+		Random:          bytes.NewReader([]byte{1, 2, 3, 4}),
+	}); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+
+	homeConfigPath := filepath.Join(repoRoot, ".changes", "config", "config.toml")
+	if _, err := os.Stat(homeConfigPath); err != nil {
+		t.Fatalf("home config path missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, ".changes", "config", "layout.toml")); err != nil {
+		t.Fatalf("home layout manifest missing: %v", err)
+	}
+	for _, dir := range []string{
+		filepath.Join(repoRoot, ".changes", "data", "fragments"),
+		filepath.Join(repoRoot, ".changes", "data", "releases"),
+		filepath.Join(repoRoot, ".changes", "data", "prompts"),
+		filepath.Join(repoRoot, ".changes", "state"),
+	} {
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			t.Fatalf("expected directory %s to exist, err=%v", dir, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, ".config", "changes", "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("xdg config path should not exist, err=%v", err)
+	}
+
+	cfg, err := config.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if got := config.RepoConfigPath(repoRoot); got != homeConfigPath {
+		t.Fatalf("RepoConfigPath = %q, want %q", got, homeConfigPath)
+	}
+	if got := config.FragmentsDir(repoRoot, cfg); got != filepath.Join(repoRoot, ".changes", "data", "fragments") {
+		t.Fatalf("FragmentsDir = %q", got)
+	}
+	if got := config.StateDir(repoRoot, cfg); got != filepath.Join(repoRoot, ".changes", "state") {
+		t.Fatalf("StateDir = %q", got)
+	}
+}
+
+func TestInitializeHomeLayoutAddsStateGitignore(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	if _, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot:        repoRoot,
+		RequestedLayout: "home",
+		Now:             time.Date(2026, 4, 6, 12, 10, 0, 0, time.UTC),
+		Random:          bytes.NewReader([]byte{5, 6, 7, 8}),
+	}); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(repoRoot, ".gitignore"))
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+	body := string(raw)
+	if !strings.Contains(body, "/.changes/state/") {
+		t.Fatalf(".gitignore = %q, want home state entry", body)
+	}
+	if strings.Contains(body, "/.local/state/") {
+		t.Fatalf(".gitignore = %q, should not include xdg state entry", body)
+	}
+}
+
 func TestInitializeReleasedVersionCreatesBootstrapArtifacts(t *testing.T) {
 	repoRoot := t.TempDir()
 	now := time.Date(2026, 4, 6, 12, 30, 0, 0, time.UTC)
