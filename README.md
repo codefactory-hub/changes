@@ -1,8 +1,27 @@
 # `changes`
 
-`changes` is a fragment-driven changelog and release-notes CLI for Git repositories. It uses repo-local XDG-style directories, durable fragments, and per-release records instead of destructive fragment deletion.
+`changes` is a language-agnostic changelog and release-notes tool for Git repositories.
 
-`changes` is fragment-centric. External changelog formats are views generated from fragments plus release records; they are not the source of truth.
+It helps developers record release-relevant changes in simple terms at the time they make the change, without forcing them to decide the release version immediately. Later, when a team prepares a release, `changes` uses those recorded change descriptions together with the repository's versioning policy to suggest the next version and create an explicit release record. From that recorded release history, it can render outputs such as a repository changelog or release-note text for a publishing surface like GitHub or GitLab.
+
+`changes` does not treat Git commits as release history.
+
+Git commits are optimized for building software: they capture implementation steps, review iterations, refactors, and other source-control details. Release history has a different job. It needs to surface the changes that matter for versioning, changelogs, and release communication. That is why `changes` uses fragments instead of commit history directly. A pull request might produce no fragments, one fragment, or several, depending on what is worth carrying forward into release history.
+
+The tool keeps three concerns separate:
+
+- **Describing changes.** Fragments record individual release-relevant changes close to when the work happens.
+- **Deciding releases.** Release records capture the decision to cut a specific release at a specific version and define the release lineage over time.
+- **Communicating releases.** Rendered outputs such as `CHANGELOG.md` or release-body text are generated views built from fragments plus release records.
+
+That separation lets teams describe work as they go, make release decisions later with better context, and publish different output formats without rewriting the underlying history.
+
+## How it works
+
+1. Developers create fragments as they work.
+2. At release time, `changes` reviews the pending fragments and recommends a version.
+3. A release record is created to capture that release decision.
+4. Changelogs and release-note documents are rendered from the recorded release history.
 
 Default fragment shape:
 
@@ -21,7 +40,6 @@ Committed:
 
 - `.config/changes/config.toml`
 - `.local/share/changes/fragments/`
-- `.local/share/changes/prompts/`
 - `.local/share/changes/releases/`
 - `.local/share/changes/templates/`
 
@@ -40,10 +58,12 @@ changes create --public-api add --edit
 changes status
 changes status --explain
 changes release
-changes release --pre rc
-changes release --version 1.2.0
-changes release --bump minor
-changes release --yes
+changes release --accept
+changes release --accept --pre rc
+changes release --override --bump minor
+changes release --override --bump minor --pre rc
+changes release --override --version 1.2.0
+changes release --override --version 1.2.0-rc.3
 changes render --version 1.2.0-rc.1 [--profile github_release] [--output path]
 changes render --latest --profile repository_markdown > CHANGELOG.md
 changes render profiles
@@ -56,7 +76,7 @@ Interactive authoring prompts for optional `name` stem and body text when you ru
 - `changes init --current-version unreleased` starts a new repository with no adoption release record
 - `changes init --current-version 0.0.0` is treated the same as `unreleased`
 - `changes init --current-version 2.7.4` creates a standard adoption release and fragment at `2.7.4`
-- init always generates `.local/share/changes/prompts/release-history-import-llm-prompt.md` as a repo-specific starting point for an LLM-assisted historical import workflow
+- when init creates an adoption release, it also generates `.local/share/changes/prompts/release-history-import-llm-prompt.md` as a repo-specific starting point for an LLM-assisted historical import workflow
 - rerunning `init` after bootstrap adoption artifacts already exist fails and asks you to review or remove them intentionally
 
 ## Fragment vocabulary
@@ -83,13 +103,13 @@ The intended meaning is:
 
 `type = "added|changed|fixed"` remains available as an optional render grouping for release-note sections. It is no longer the primary way the tool describes semver intent to developers.
 
-Inspect the derived impact evidence with `changes status --explain`. In a TTY, `changes release` shows the same evidence, proposes a default release version when one can be inferred, and lets a human accept it with Enter or override it with `patch`, `minor`, or `major`. If no version bump is inferred from the fragment levers, `release` requires an explicit human choice.
+Inspect the derived impact evidence with `changes status --explain`. In a TTY, `changes release` shows the same evidence, proposes a default release version when one can be inferred, and lets a human accept the recommendation with Enter or override it with `patch`, `minor`, or `major`. If no version bump is inferred from the fragment levers, `release` requires an explicit override choice.
 
 ## Model
 
 - Fragments are durable source records. They are not deleted when a release happens.
 - Release records are canonical per-release files stored under `.local/share/changes/releases/`.
-- Prompt files under `.local/share/changes/prompts/` are repo-specific helper artifacts, not canonical release history.
+- Prompt files under `.local/share/changes/prompts/` are optional repo-specific helper artifacts created during adoption bootstrap. They are not canonical release history.
 - Every release identity requires one base `ReleaseRecord` named `<product>-<version>.toml`.
 - Optional companion `ReleaseRecord`s use SemVer build metadata, such as `<product>-1.2.3+docs.1.toml`, for additional canonical records tied to the exact same release.
 - Base release records carry lineage, fragment selection, and release-wide structure such as sections and display fields.
@@ -126,7 +146,7 @@ public_api = "unstable"
 
 ## Historical Import Prompt
 
-`changes init` always generates `.local/share/changes/prompts/release-history-import-llm-prompt.md`.
+When `changes init` bootstraps an already-released product, it generates `.local/share/changes/prompts/release-history-import-llm-prompt.md`.
 
 - The prompt explains the repository's `changes` layout and current bootstrap state.
 - For adopted repositories, it explains that the standard adoption release and fragment may be replaced or refined intentionally.
@@ -154,7 +174,7 @@ The current policy layer distinguishes between stable and unstable public APIs t
 - additive levers such as `public_api = "add"`, `behavior = "new"`, `dependency = "relax"`, and `runtime = "expand"` still suggest `minor`
 - `behavior = "fix"` still suggests `patch`
 
-That policy drives the tool's recommendation. `changes status --explain` and interactive `changes release` show the recommended bump and the evidence behind it. `changes release --yes` accepts the default recommendation when one exists, while `changes release --bump <patch|minor|major>` or `changes release --version <exact>` lets the operator choose explicitly.
+That policy drives the tool's recommendation. `changes status --explain` and interactive `changes release` show the recommended bump and the evidence behind it. Non-interactive release requires an explicit decision: `changes release --accept` to accept the recommendation, or `changes release --override --bump <patch|minor|major>` / `changes release --override --version <exact>` to override it.
 
 ## Rendering
 

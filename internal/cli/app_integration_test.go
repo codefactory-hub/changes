@@ -35,7 +35,7 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 
 	assertExists(t, filepath.Join(repoRoot, ".config/changes/config.toml"))
-	assertExists(t, config.HistoryImportPromptPath(repoRoot, config.Default()))
+	assertNotExists(t, config.HistoryImportPromptPath(repoRoot, config.Default()))
 	assertExists(t, filepath.Join(repoRoot, ".local/share/changes/templates/repository-markdown-release.md.tmpl"))
 
 	gitignore, err := os.ReadFile(filepath.Join(repoRoot, ".gitignore"))
@@ -102,7 +102,7 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 16, 0, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "--pre", "rc", "--yes"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--accept", "--pre", "rc"}); err != nil {
 		t.Fatalf("release --pre rc returned error: %v", err)
 	}
 	rc1Path := strings.TrimSpace(stdout.String())
@@ -132,7 +132,7 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 17, 0, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "--pre", "rc", "--yes"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--accept", "--pre", "rc"}); err != nil {
 		t.Fatalf("second release --pre rc returned error: %v", err)
 	}
 	rc2Path := strings.TrimSpace(stdout.String())
@@ -162,7 +162,7 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 17, 30, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "--pre", "beta", "--yes"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--accept", "--pre", "beta"}); err != nil {
 		t.Fatalf("release --pre beta returned error: %v", err)
 	}
 	beta1Path := strings.TrimSpace(stdout.String())
@@ -197,7 +197,7 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 18, 0, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "--yes"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--accept"}); err != nil {
 		t.Fatalf("release returned error: %v", err)
 	}
 	stablePath := strings.TrimSpace(stdout.String())
@@ -356,7 +356,7 @@ func TestStatusExplainShowsPolicyEvidence(t *testing.T) {
 	}
 }
 
-func TestInitDefaultsToUnreleasedAndCreatesPromptOnly(t *testing.T) {
+func TestInitDefaultsToUnreleasedWithoutBootstrapPrompt(t *testing.T) {
 	repoRoot := t.TempDir()
 	gitInit(t, repoRoot)
 	t.Chdir(repoRoot)
@@ -380,7 +380,7 @@ func TestInitDefaultsToUnreleasedAndCreatesPromptOnly(t *testing.T) {
 		t.Fatalf("load config: %v", err)
 	}
 	promptPath := config.HistoryImportPromptPath(repoRoot, cfg)
-	assertExists(t, promptPath)
+	assertNotExists(t, promptPath)
 
 	records, err := releases.List(repoRoot, cfg)
 	if err != nil {
@@ -493,7 +493,7 @@ func TestInitCurrentVersionCreatesAdoptionBootstrap(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if err := app.Run(context.Background(), []string{"release", "--yes"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--accept"}); err != nil {
 		t.Fatalf("release returned error: %v", err)
 	}
 	releasePath := strings.TrimSpace(strings.Split(stdout.String(), "\n")[0])
@@ -620,7 +620,7 @@ func TestReleaseRequiresDecisionOutsideTTY(t *testing.T) {
 	if err == nil {
 		t.Fatalf("release should require an explicit decision outside TTY")
 	}
-	if !strings.Contains(stderr.String(), "non-interactive use requires --yes, --bump, or --version") {
+	if !strings.Contains(stderr.String(), "non-interactive use requires --accept or --override") {
 		t.Fatalf("unexpected stderr:\n%s", stderr.String())
 	}
 }
@@ -658,11 +658,11 @@ func TestReleaseRequiresExplicitBumpWhenNoImpactIsInferred(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	err := app.Run(context.Background(), []string{"release", "--yes"})
+	err := app.Run(context.Background(), []string{"release", "--accept"})
 	if err == nil {
-		t.Fatalf("release --yes should fail when no bump is inferred")
+		t.Fatalf("release --accept should fail when no bump is inferred")
 	}
-	if !strings.Contains(stderr.String(), "no version bump was inferred; pass --bump or --version") {
+	if !strings.Contains(stderr.String(), "no version bump was inferred; use --override --bump or --override --version") {
 		t.Fatalf("unexpected stderr:\n%s", stderr.String())
 	}
 }
@@ -692,7 +692,7 @@ func TestReleasePromptsInTTYAndAllowsOverride(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create returned error: %v", err)
 	}
-	if err := app.Run(context.Background(), []string{"release", "--yes"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--accept"}); err != nil {
 		t.Fatalf("initial release returned error: %v", err)
 	}
 
@@ -718,6 +718,9 @@ func TestReleasePromptsInTTYAndAllowsOverride(t *testing.T) {
 	body := stdout.String()
 	if !strings.Contains(body, "Policy evidence:") || !strings.Contains(body, "Default release: 0.1.1") {
 		t.Fatalf("interactive release missing evidence:\n%s", body)
+	}
+	if !strings.Contains(stderr.String(), "Press Enter to accept the recommendation, choose patch/minor/major to override, or type cancel: ") {
+		t.Fatalf("interactive release missing prompt wording:\n%s", stderr.String())
 	}
 	lines := strings.Split(strings.TrimSpace(body), "\n")
 	releasePath := lines[len(lines)-1]
@@ -760,6 +763,193 @@ func TestReleasePromptCanCancel(t *testing.T) {
 	err := app.Run(context.Background(), []string{"release"})
 	if err == nil || !strings.Contains(err.Error(), "release canceled") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReleaseValidatesAcceptAndOverrideFlags(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 13, 30, 0, 0, time.UTC)
+	}
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "override requires detail",
+			args: []string{"release", "--override"},
+			want: "release: --override requires --bump or --version",
+		},
+		{
+			name: "accept cannot combine with override",
+			args: []string{"release", "--accept", "--override", "--bump", "minor"},
+			want: "release: --accept and --override cannot be combined",
+		},
+		{
+			name: "accept cannot combine with bump",
+			args: []string{"release", "--accept", "--bump", "minor"},
+			want: "release: --accept cannot be combined with --bump",
+		},
+		{
+			name: "accept cannot combine with version",
+			args: []string{"release", "--accept", "--version", "1.2.0"},
+			want: "release: --accept cannot be combined with --version",
+		},
+		{
+			name: "override cannot combine bump and version",
+			args: []string{"release", "--override", "--bump", "minor", "--version", "1.2.0"},
+			want: "release: --version cannot be combined with --bump",
+		},
+		{
+			name: "pre cannot combine with override version",
+			args: []string{"release", "--override", "--version", "1.2.0-beta.3", "--pre", "beta"},
+			want: "release: --pre cannot be combined with --override --version",
+		},
+		{
+			name: "bump requires override",
+			args: []string{"release", "--bump", "minor"},
+			want: "release: --bump requires --override",
+		},
+		{
+			name: "version requires override",
+			args: []string{"release", "--version", "1.2.0"},
+			want: "release: --version requires --override",
+		},
+	}
+
+	for _, tc := range cases {
+		stdout.Reset()
+		stderr.Reset()
+		err := app.Run(context.Background(), tc.args)
+		if err == nil || !strings.Contains(stderr.String(), tc.want) {
+			t.Fatalf("%s: unexpected error\nstdout=%s\nstderr=%s\nerr=%v", tc.name, stdout.String(), stderr.String(), err)
+		}
+	}
+}
+
+func TestReleaseSupportsOverrideBumpAndExactVersion(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 13, 45, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{6, 5, 4, 3, 2, 1, 7, 8, 9, 10, 11, 12, 13, 14, 15})
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"--behavior", "fix",
+		"Fix parser stability.",
+	}); err != nil {
+		t.Fatalf("create returned error: %v", err)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"release", "--override", "--bump", "minor"}); err != nil {
+		t.Fatalf("override bump release returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	recordPath := strings.TrimSpace(stdout.String())
+	record, err := releases.Load(recordPath)
+	if err != nil {
+		t.Fatalf("load override bump release: %v", err)
+	}
+	if record.Version != "0.1.0" {
+		t.Fatalf("override bump version = %q, want 0.1.0", record.Version)
+	}
+
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 14, 0, 0, 0, time.UTC)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"--public-api", "add",
+		"Add parser extension point.",
+	}); err != nil {
+		t.Fatalf("second create returned error: %v", err)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"release", "--override", "--bump", "minor", "--pre", "beta"}); err != nil {
+		t.Fatalf("override prerelease returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	recordPath = strings.TrimSpace(stdout.String())
+	record, err = releases.Load(recordPath)
+	if err != nil {
+		t.Fatalf("load override prerelease: %v", err)
+	}
+	if record.Version != "0.2.0-beta.1" {
+		t.Fatalf("override prerelease version = %q, want 0.2.0-beta.1", record.Version)
+	}
+
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 14, 15, 0, 0, time.UTC)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"--behavior", "fix",
+		"Fix parser docs formatting.",
+	}); err != nil {
+		t.Fatalf("third create returned error: %v", err)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"release", "--override", "--version", "1.2.0"}); err != nil {
+		t.Fatalf("override exact version returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	recordPath = strings.TrimSpace(stdout.String())
+	record, err = releases.Load(recordPath)
+	if err != nil {
+		t.Fatalf("load exact version release: %v", err)
+	}
+	if record.Version != "1.2.0" {
+		t.Fatalf("exact version release = %q, want 1.2.0", record.Version)
+	}
+
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 14, 30, 0, 0, time.UTC)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"--behavior", "fix",
+		"Fix parser prerelease formatting.",
+	}); err != nil {
+		t.Fatalf("fourth create returned error: %v", err)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"release", "--override", "--version", "1.3.0-beta.3"}); err != nil {
+		t.Fatalf("override exact prerelease returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	recordPath = strings.TrimSpace(stdout.String())
+	record, err = releases.Load(recordPath)
+	if err != nil {
+		t.Fatalf("load exact prerelease release: %v", err)
+	}
+	if record.Version != "1.3.0-beta.3" {
+		t.Fatalf("exact prerelease release = %q, want 1.3.0-beta.3", record.Version)
 	}
 }
 
@@ -920,5 +1110,15 @@ func assertExists(t *testing.T, path string) {
 
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected %s to exist: %v", path, err)
+	}
+}
+
+func assertNotExists(t *testing.T, path string) {
+	t.Helper()
+
+	if _, err := os.Stat(path); err == nil {
+		t.Fatalf("expected %s not to exist", path)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat %s: %v", path, err)
 	}
 }

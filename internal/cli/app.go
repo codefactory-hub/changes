@@ -175,29 +175,26 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 		adoptionRecordPath = recordPath
 	}
 
-	promptPath, err := writeHistoryImportPrompt(repoRoot, cfg, historyImportPromptData{
-		Product:             cfg.Project.Name,
-		CurrentVersionLabel: currentVersionLabel,
-		ChangelogPath:       config.ChangelogPath(repoRoot, cfg),
-		ConfigPath:          config.RepoConfigPath(repoRoot),
-		FragmentsDir:        config.FragmentsDir(repoRoot, cfg),
-		ReleasesDir:         config.ReleasesDir(repoRoot, cfg),
-		TemplatesDir:        config.TemplatesDir(repoRoot, cfg),
-		PromptPath:          config.HistoryImportPromptPath(repoRoot, cfg),
-		AdoptionRecordPath:  adoptionRecordPath,
-		AdoptionFragment:    adoptionFragment,
-		AdoptionRecord:      adoptionRecord,
-	})
-	if err != nil {
-		return err
-	}
-
 	_, _ = fmt.Fprintf(a.Stdout, "initialized %s\n", repoRoot)
 	if adoptionRecord != nil {
+		promptPath, err := writeHistoryImportPrompt(repoRoot, cfg, historyImportPromptData{
+			Product:             cfg.Project.Name,
+			CurrentVersionLabel: currentVersionLabel,
+			ChangelogPath:       config.ChangelogPath(repoRoot, cfg),
+			ConfigPath:          config.RepoConfigPath(repoRoot),
+			FragmentsDir:        config.FragmentsDir(repoRoot, cfg),
+			ReleasesDir:         config.ReleasesDir(repoRoot, cfg),
+			TemplatesDir:        config.TemplatesDir(repoRoot, cfg),
+			PromptPath:          config.HistoryImportPromptPath(repoRoot, cfg),
+			AdoptionRecordPath:  adoptionRecordPath,
+			AdoptionFragment:    adoptionFragment,
+			AdoptionRecord:      adoptionRecord,
+		})
+		if err != nil {
+			return err
+		}
 		_, _ = fmt.Fprintf(a.Stdout, "next step: review %s to replace or refine the standard adoption history.\n", repoRelativePath(repoRoot, promptPath))
-		return nil
 	}
-	_, _ = fmt.Fprintf(a.Stdout, "next step: review %s if you want help reconstructing historical release history.\n", repoRelativePath(repoRoot, promptPath))
 	return nil
 }
 
@@ -277,24 +274,47 @@ func (a *App) runRelease(ctx context.Context, args []string) error {
 	var version string
 	var pre string
 	var bump string
-	var yes bool
+	var accept bool
+	var override bool
 
 	fs.StringVar(&version, "version", "", "Release version")
 	fs.StringVar(&pre, "pre", "", "Prerelease label")
-	fs.StringVar(&bump, "bump", "", "Override the recommended bump")
-	fs.BoolVar(&yes, "yes", false, "Accept the current recommendation without prompting")
+	fs.StringVar(&bump, "bump", "", "Override detail: choose patch, minor, or major")
+	fs.BoolVar(&accept, "accept", false, "Accept the current recommendation without prompting")
+	fs.BoolVar(&override, "override", false, "Override the current recommendation")
 
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("usage: changes release [--version v] [--pre label] [--bump patch|minor|major] [--yes]")
+		return fmt.Errorf("usage: changes release [--accept] [--accept --pre label] [--override --bump patch|minor|major] [--override --bump patch|minor|major --pre label] [--override --version version]")
 	}
-	if strings.TrimSpace(version) != "" && strings.TrimSpace(pre) != "" {
-		return fmt.Errorf("release: --version cannot be combined with --pre")
+	if accept && override {
+		return fmt.Errorf("release: --accept and --override cannot be combined")
 	}
-	if strings.TrimSpace(version) != "" && strings.TrimSpace(bump) != "" {
+	if accept && strings.TrimSpace(bump) != "" {
+		return fmt.Errorf("release: --accept cannot be combined with --bump")
+	}
+	if accept && strings.TrimSpace(version) != "" {
+		return fmt.Errorf("release: --accept cannot be combined with --version")
+	}
+	if !override && strings.TrimSpace(bump) != "" {
+		return fmt.Errorf("release: --bump requires --override")
+	}
+	if !override && strings.TrimSpace(version) != "" {
+		return fmt.Errorf("release: --version requires --override")
+	}
+	if override && strings.TrimSpace(version) != "" && strings.TrimSpace(pre) != "" {
+		return fmt.Errorf("release: --pre cannot be combined with --override --version")
+	}
+	if override && strings.TrimSpace(version) != "" && strings.TrimSpace(bump) != "" {
 		return fmt.Errorf("release: --version cannot be combined with --bump")
+	}
+	if override && strings.TrimSpace(version) == "" && strings.TrimSpace(bump) == "" {
+		return fmt.Errorf("release: --override requires --bump or --version")
+	}
+	if !a.isTTY() && !accept && !override {
+		return fmt.Errorf("release: non-interactive use requires --accept or --override")
 	}
 
 	repoRoot, cfg, err := a.loadConfig(ctx)
@@ -320,13 +340,10 @@ func (a *App) runRelease(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if !a.isTTY() && !yes && strings.TrimSpace(version) == "" && strings.TrimSpace(bump) == "" {
-		return fmt.Errorf("release: non-interactive use requires --yes, --bump, or --version")
+	if accept && releaseBump == versioning.BumpNone {
+		return fmt.Errorf("release: no version bump was inferred; use --override --bump or --override --version")
 	}
-	if !a.isTTY() && yes && strings.TrimSpace(version) == "" && strings.TrimSpace(bump) == "" && releaseBump == versioning.BumpNone {
-		return fmt.Errorf("release: no version bump was inferred; pass --bump or --version")
-	}
-	if a.isTTY() && !yes && strings.TrimSpace(version) == "" {
+	if a.isTTY() && !accept && !override {
 		releaseVersion, releaseBump, err = a.confirmReleaseSelection(releaseVersion, releaseBump, pre, unreleased, policy, cfg, records, product)
 		if err != nil {
 			return err
@@ -613,9 +630,14 @@ Show unreleased fragment counts, the policy-derived recommended bump, the recomm
 	case "release":
 		body = strings.TrimSpace(`
 Usage:
-  changes release [--version <version>] [--pre <label>] [--bump <patch|minor|major>] [--yes]
+  changes release
+  changes release --accept
+  changes release --accept --pre <label>
+  changes release --override --bump <patch|minor|major>
+  changes release --override --bump <patch|minor|major> --pre <label>
+  changes release --override --version <version>
 
-Create a base release record for the selected release. In a TTY, the command shows the release evidence and lets you accept or override the default recommendation unless you pass --yes.
+Create a base release record for the selected release. In a TTY, the command shows the release evidence and lets you accept or override the recommendation. In non-interactive use, choose either --accept or --override.
 `)
 	case "render":
 		body = strings.TrimSpace(`
@@ -821,7 +843,7 @@ func (a *App) confirmReleaseSelection(releaseVersion versioning.Version, release
 	renderReleaseDecisionSummary(a.Stdout, pending, policy, releaseVersion)
 
 	if releaseBump == versioning.BumpNone {
-		answer, err := a.promptOptionalLine("No version bump was inferred. Choose patch/minor/major or type cancel: ")
+		answer, err := a.promptOptionalLine("No version bump was inferred. Choose patch/minor/major to override, or type cancel: ")
 		if err != nil {
 			return versioning.Version{}, versioning.BumpNone, err
 		}
@@ -847,7 +869,7 @@ func (a *App) confirmReleaseSelection(releaseVersion versioning.Version, release
 	}
 
 	if strings.TrimSpace(pre) != "" {
-		answer, err := a.promptOptionalLine("Press Enter to accept, choose patch/minor/major for a different target, or type cancel: ")
+		answer, err := a.promptOptionalLine("Press Enter to accept the recommendation, choose patch/minor/major to override, or type cancel: ")
 		if err != nil {
 			return versioning.Version{}, versioning.BumpNone, err
 		}
@@ -871,7 +893,7 @@ func (a *App) confirmReleaseSelection(releaseVersion versioning.Version, release
 		}
 	}
 
-	answer, err := a.promptOptionalLine("Press Enter to accept, choose patch/minor/major, or type cancel: ")
+	answer, err := a.promptOptionalLine("Press Enter to accept the recommendation, choose patch/minor/major to override, or type cancel: ")
 	if err != nil {
 		return versioning.Version{}, versioning.BumpNone, err
 	}
