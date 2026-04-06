@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_for_next_phase
-stopped_at: Completed 01-layout-proposal-02-PLAN.md
-last_updated: "2026-04-06T20:38:05.134Z"
-last_activity: 2026-04-06 -- Phase 1 complete; Phase 2 ready to begin
+status: ready_to_plan
+stopped_at: Phase 2 context gathered
+last_updated: "2026-04-06T21:45:57.983Z"
+last_activity: 2026-04-06 -- Phase 2 context gathered
 progress:
   total_phases: 5
   completed_phases: 1
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 2: Resolution Core ready to begin
+**Current focus:** Phase 2: Resolution Core context captured
 
 ## Current Position
 
 Phase: 2 of 5 (Resolution Core)
 Plan: Not started
-Status: Phase 1 complete — ready for Phase 2
-Last activity: 2026-04-06 -- Phase 1 complete; Phase 2 ready to begin
+Status: Ready to plan
+Last activity: 2026-04-06 -- Phase 2 context gathered
 
 Progress: [██░░░░░░░░] 20%
 
@@ -71,10 +71,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Phase 2 is the next active target.
+- No current blockers; Phase 2 context is locked and ready for planning.
 
 ## Session Continuity
 
-Last session: 2026-04-06T20:38:05.134Z
-Stopped at: Phase 1 completion recorded
-Resume file: .planning/ROADMAP.md
+Last session: 2026-04-06T21:45:57.973Z
+Stopped at: Phase 2 context gathered
+Resume file: .planning/phases/02-resolution-core/02-CONTEXT.md
