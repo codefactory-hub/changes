@@ -93,6 +93,9 @@ func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 	if !strings.Contains(githubOutput, "# Release 0.1.0") {
 		t.Fatalf("github output missing heading: %s", githubOutput)
 	}
+	if !strings.Contains(githubOutput, "- first body") {
+		t.Fatalf("github output should render bullet entries: %s", githubOutput)
+	}
 	if !strings.Contains(testerOutput, "- first body") {
 		t.Fatalf("tester output should render the body preview: %s", testerOutput)
 	}
@@ -216,6 +219,49 @@ func TestRenderLoadTemplateFallbackAndErrors(t *testing.T) {
 	}
 	if _, err := loadTemplate(repoRoot, cfg, "missing.tmpl"); err == nil || !strings.Contains(err.Error(), "is not available") {
 		t.Fatalf("unexpected missing template error: %v", err)
+	}
+}
+
+func TestInitialReleaseSuppressesBreakingSectionAndMarker(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := config.Default()
+	ensureBuiltinTemplates(t, repoRoot, cfg)
+
+	record := releases.ReleaseRecord{
+		Product:          "changes",
+		Version:          "0.1.0",
+		CreatedAt:        time.Date(2026, 4, 2, 18, 0, 0, 0, time.UTC),
+		AddedFragmentIDs: []string{"f1"},
+	}
+	allFragments := []fragments.Fragment{
+		{
+			Metadata: fragments.Metadata{
+				ID:        "f1",
+				CreatedAt: time.Date(2026, 4, 2, 15, 0, 0, 0, time.UTC),
+				Type:      "changed",
+				Breaking:  true,
+			},
+			Body: "Reshape the API before the first public release.",
+		},
+	}
+	bundle, err := releases.AssembleRelease(record, []releases.ReleaseRecord{record}, allFragments)
+	if err != nil {
+		t.Fatalf("AssembleRelease returned error: %v", err)
+	}
+	renderer, err := New(repoRoot, cfg, config.RenderProfileGitHubRelease)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+
+	output, err := renderer.Render(Document{Bundles: []releases.ReleaseBundle{bundle}})
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+	if strings.Contains(output, "Breaking Changes") || strings.Contains(output, "(breaking)") {
+		t.Fatalf("initial release should not advertise breaking changes:\n%s", output)
+	}
+	if !strings.Contains(output, "## Changed") || !strings.Contains(output, "- Reshape the API before the first public release.") {
+		t.Fatalf("initial release output missing changed bullet:\n%s", output)
 	}
 }
 

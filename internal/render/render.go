@@ -130,10 +130,11 @@ func (r *Renderer) Pack() TemplatePack {
 
 func (r *Renderer) renderBundle(bundle releases.ReleaseBundle) (string, error) {
 	sections := make([]renderedSection, 0, len(bundle.Sections))
+	suppressBreaking := strings.TrimSpace(bundle.Release.ParentVersion) == "" && !bundle.Release.Bootstrap
 	for _, section := range bundle.Sections {
 		renderedEntries := make([]string, 0, len(section.Entries))
 		for _, entry := range section.Entries {
-			body, err := r.renderEntry(entry)
+			body, err := r.renderEntry(entry, suppressBreaking)
 			if err != nil {
 				return "", err
 			}
@@ -188,9 +189,13 @@ func (r *Renderer) renderDocument(doc Document) (string, error) {
 	return assembleDocument(r.pack, blocks, doc.OmittedReleaseCount), nil
 }
 
-func (r *Renderer) renderEntry(entry releases.BundleEntry) (string, error) {
+func (r *Renderer) renderEntry(entry releases.BundleEntry, suppressBreaking bool) (string, error) {
+	fragment := entry.Fragment
+	if suppressBreaking {
+		fragment.Breaking = false
+	}
 	var buf bytes.Buffer
-	if err := r.entryTemplate.Execute(&buf, entry.Fragment); err != nil {
+	if err := r.entryTemplate.Execute(&buf, fragment); err != nil {
 		return "", fmt.Errorf("render entry %s: %w", entry.Fragment.ID, err)
 	}
 	return buf.String(), nil

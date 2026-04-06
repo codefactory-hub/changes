@@ -144,13 +144,44 @@ func TestBundleHelpersClassifySortAndHumanize(t *testing.T) {
 		t.Fatalf("first section = %#v, want custom section", sections[0])
 	}
 
-	if key, title := classifyFragment(fragments.Fragment{Metadata: fragments.Metadata{Type: "security"}}); key != "security" || title != "Security" {
+	if key, title := classifyFragment(fragments.Fragment{Metadata: fragments.Metadata{Type: "security"}}, false); key != "security" || title != "Security" {
 		t.Fatalf("classifyFragment(security) = (%q, %q)", key, title)
+	}
+	if key, title := classifyFragment(fragments.Fragment{Metadata: fragments.Metadata{Type: "changed", Breaking: true}}, true); key != "changed" || title != "Changed" {
+		t.Fatalf("classifyFragment(initial breaking) = (%q, %q), want changed section", key, title)
 	}
 	if got := mustIncludeFragmentIDs(selected); len(got) != 3 {
 		t.Fatalf("mustIncludeFragmentIDs = %#v, want 3 items", got)
 	}
 	if got := humanizeSectionKey("ops_updates"); got != "Ops Updates" {
 		t.Fatalf("humanizeSectionKey = %q, want Ops Updates", got)
+	}
+}
+
+func TestInitialReleaseDoesNotEmitBreakingSection(t *testing.T) {
+	base := ReleaseRecord{
+		Product:          "changes",
+		Version:          "0.1.0",
+		CreatedAt:        time.Date(2026, 4, 3, 18, 0, 0, 0, time.UTC),
+		AddedFragmentIDs: []string{"f1"},
+	}
+	allFragments := []fragments.Fragment{
+		{
+			Metadata: fragments.Metadata{
+				ID:        "f1",
+				CreatedAt: time.Date(2026, 4, 3, 17, 0, 0, 0, time.UTC),
+				Type:      "changed",
+				Breaking:  true,
+			},
+			Body: "Reshape the API before the first release.",
+		},
+	}
+
+	bundle, err := AssembleRelease(base, []ReleaseRecord{base}, allFragments)
+	if err != nil {
+		t.Fatalf("AssembleRelease returned error: %v", err)
+	}
+	if len(bundle.Sections) != 1 || bundle.Sections[0].Key != "changed" {
+		t.Fatalf("initial release sections = %#v, want changed only", bundle.Sections)
 	}
 }

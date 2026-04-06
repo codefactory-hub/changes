@@ -129,13 +129,14 @@ func bundleSections(base ReleaseRecord, selected []fragments.Fragment) []BundleS
 	buckets := make(map[string][]BundleEntry)
 	titles := make(map[string]string)
 	defined := make([]string, 0, len(base.Sections))
+	suppressBreaking := strings.TrimSpace(base.ParentVersion) == "" && !base.Bootstrap
 	for _, section := range base.Sections {
 		defined = append(defined, section.Key)
 		titles[section.Key] = section.Title
 	}
 
 	for _, item := range selected {
-		key, title := classifyFragment(item)
+		key, title := classifyFragment(item, suppressBreaking)
 		if strings.TrimSpace(item.SectionKey) != "" {
 			key = item.SectionKey
 		}
@@ -195,8 +196,8 @@ func bundleSections(base ReleaseRecord, selected []fragments.Fragment) []BundleS
 	return out
 }
 
-func classifyFragment(item fragments.Fragment) (string, string) {
-	if item.Breaking {
+func classifyFragment(item fragments.Fragment, suppressBreaking bool) (string, string) {
+	if item.Breaking && !suppressBreaking {
 		return "breaking", "Breaking Changes"
 	}
 

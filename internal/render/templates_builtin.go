@@ -80,7 +80,7 @@ const DefaultRPMChangelogTemplate = `* {{ formatDateRPM .Release.CreatedAt }} {{
 {{- end }}
 `
 
-const DefaultReleaseEntryTemplate = `{{ .Body }}`
+const DefaultReleaseEntryTemplate = `- {{ singleLine .Body }}{{ if .Breaking }} (breaking){{ end }}`
 
 const DefaultTesterSummaryEntryTemplate = `- {{ singleLine .Body }}`
 
