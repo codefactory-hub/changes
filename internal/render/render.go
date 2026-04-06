@@ -252,7 +252,7 @@ func loadTemplate(repoRoot string, cfg config.Config, name string) (string, erro
 }
 
 func (p TemplatePack) metadataValue(key, fallback string) string {
-	if value, ok := p.Metadata[key]; ok && strings.TrimSpace(value) != "" {
+	if value, ok := p.Metadata[key]; ok {
 		return value
 	}
 	return fallback

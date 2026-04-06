@@ -14,7 +14,10 @@ import (
 )
 
 func TestAvailablePacksExposeBuiltInProfiles(t *testing.T) {
-	packs := AvailablePacks(config.Default())
+	packs, err := AvailablePacks(config.Default())
+	if err != nil {
+		t.Fatalf("AvailablePacks returned error: %v", err)
+	}
 	names := make([]string, 0, len(packs))
 	for _, pack := range packs {
 		names = append(names, pack.Name)

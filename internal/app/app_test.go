@@ -349,6 +349,44 @@ func TestCommitReleasePersistsThePlannedRecord(t *testing.T) {
 	}
 }
 
+func TestCommitReleaseRejectsStaleOrDuplicatePlans(t *testing.T) {
+	repoRoot := t.TempDir()
+	now := time.Date(2026, 4, 6, 16, 45, 0, 0, time.UTC)
+
+	if _, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot: repoRoot,
+		Now:      now,
+		Random:   bytes.NewReader([]byte{1, 2, 3, 4}),
+	}); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+	cfg, err := config.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if _, err := fragments.Create(repoRoot, cfg, now.Add(time.Minute), bytes.NewReader([]byte{5, 6, 7, 8}), fragments.NewInput{
+		Behavior: "fix",
+		Body:     "Fix the shipped parser crash.",
+	}); err != nil {
+		t.Fatalf("create fragment: %v", err)
+	}
+
+	plan, err := PlanRelease(context.Background(), ReleasePlanRequest{
+		RepoRoot: repoRoot,
+		Now:      now.Add(2 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("PlanRelease returned error: %v", err)
+	}
+
+	if _, err := CommitRelease(context.Background(), plan); err != nil {
+		t.Fatalf("first CommitRelease returned error: %v", err)
+	}
+	if _, err := CommitRelease(context.Background(), plan); err == nil || !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("second CommitRelease error = %v, want stale-plan failure", err)
+	}
+}
+
 func TestRenderSupportsLatestVersionAndRecordSelectors(t *testing.T) {
 	repoRoot := t.TempDir()
 	now := time.Date(2026, 4, 6, 17, 0, 0, 0, time.UTC)

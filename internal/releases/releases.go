@@ -63,8 +63,11 @@ func Write(repoRoot string, cfg config.Config, record ReleaseRecord) (string, er
 		return "", fmt.Errorf("create releases directory: %w", err)
 	}
 
-	file, err := os.Create(path)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
+		if os.IsExist(err) {
+			return "", fmt.Errorf("create release record: %s already exists", path)
+		}
 		return "", fmt.Errorf("create release record: %w", err)
 	}
 	defer file.Close()

@@ -176,6 +176,25 @@ func CommitRelease(_ context.Context, plan ReleasePlan) (CommitReleaseResult, er
 }
 
 func commitReleaseWithTimestamp(plan ReleasePlan, createdAt time.Time) (CommitReleaseResult, error) {
+	currentCfg, err := config.Load(plan.RepoRoot)
+	if err != nil {
+		return CommitReleaseResult{}, err
+	}
+	allFragments, currentRecords, err := loadState(plan.RepoRoot, currentCfg)
+	if err != nil {
+		return CommitReleaseResult{}, err
+	}
+	currentSelection, err := selectReleaseFragments(allFragments, currentRecords, plan.Product, plan.ChosenVersion)
+	if err != nil {
+		if len(plan.SelectedFragments) > 0 {
+			return CommitReleaseResult{}, fmt.Errorf("release plan is stale; refresh the release plan before committing")
+		}
+		return CommitReleaseResult{}, err
+	}
+	if !slices.Equal(fragmentIDs(currentSelection), fragmentIDs(plan.SelectedFragments)) {
+		return CommitReleaseResult{}, fmt.Errorf("release plan is stale; refresh the release plan before committing")
+	}
+
 	record := releases.ReleaseRecord{
 		Product:          plan.Product,
 		Version:          plan.ChosenVersion.String(),
@@ -184,11 +203,11 @@ func commitReleaseWithTimestamp(plan ReleasePlan, createdAt time.Time) (CommitRe
 		AddedFragmentIDs: fragmentIDs(plan.SelectedFragments),
 	}
 
-	if err := releases.ValidateSet(append(cloneRecords(plan.Records), record)); err != nil {
+	if err := releases.ValidateSet(append(cloneRecords(currentRecords), record)); err != nil {
 		return CommitReleaseResult{}, err
 	}
 
-	path, err := releases.Write(plan.RepoRoot, plan.Config, record)
+	path, err := releases.Write(plan.RepoRoot, currentCfg, record)
 	if err != nil {
 		return CommitReleaseResult{}, err
 	}

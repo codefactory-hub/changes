@@ -88,10 +88,10 @@ func ResolveProfiles(cfg config.Config) (map[string]config.RenderProfile, error)
 	return out, nil
 }
 
-func AvailablePacks(cfg config.Config) []TemplatePack {
+func AvailablePacks(cfg config.Config) ([]TemplatePack, error) {
 	profiles, err := ResolveProfiles(cfg)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	names := make([]string, 0, len(profiles))
 	for name := range profiles {
@@ -114,7 +114,7 @@ func AvailablePacks(cfg config.Config) []TemplatePack {
 			Metadata:        cloneMetadata(profile.Metadata),
 		})
 	}
-	return packs
+	return packs, nil
 }
 
 func resolveProfile(cfg config.Config, name string) (config.RenderProfile, error) {
@@ -151,28 +151,28 @@ func validateProfiles(profiles map[string]config.RenderProfile) error {
 
 func mergeProfile(base, override config.RenderProfile) config.RenderProfile {
 	merged := cloneProfile(base)
-	if strings.TrimSpace(override.Description) != "" {
+	if override.HasDescription() {
 		merged.Description = override.Description
 	}
-	if strings.TrimSpace(override.Mode) != "" {
+	if override.HasMode() {
 		merged.Mode = override.Mode
 	}
-	if override.DocumentHeader != "" {
+	if override.HasDocumentHeader() {
 		merged.DocumentHeader = override.DocumentHeader
 	}
-	if strings.TrimSpace(override.ReleaseTemplate) != "" {
+	if override.HasReleaseTemplate() {
 		merged.ReleaseTemplate = override.ReleaseTemplate
 	}
-	if strings.TrimSpace(override.EntryTemplate) != "" {
+	if override.HasEntryTemplate() {
 		merged.EntryTemplate = override.EntryTemplate
 	}
-	if override.MaxChars > 0 {
+	if override.HasMaxChars() {
 		merged.MaxChars = override.MaxChars
 	}
-	if override.OmissionNotice != "" {
+	if override.HasOmissionNotice() {
 		merged.OmissionNotice = override.OmissionNotice
 	}
-	if override.Metadata != nil {
+	if override.HasMetadata() {
 		if merged.Metadata == nil {
 			merged.Metadata = map[string]string{}
 		}

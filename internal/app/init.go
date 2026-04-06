@@ -69,7 +69,9 @@ func initializeWithDeps(req InitializeRequest, deps initializeDeps) (result Init
 	tx := newInitTxn()
 	defer func() {
 		if err != nil {
-			_ = tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				err = fmt.Errorf("%w; rollback failed: %v", err, rollbackErr)
+			}
 		}
 	}()
 

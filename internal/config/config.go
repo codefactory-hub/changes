@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -54,6 +55,18 @@ type RenderProfile struct {
 	MaxChars        int               `toml:"max_chars"`
 	OmissionNotice  string            `toml:"omission_notice"`
 	Metadata        map[string]string `toml:"metadata"`
+	presence        renderProfilePresence
+}
+
+type renderProfilePresence struct {
+	Description     bool
+	Mode            bool
+	DocumentHeader  bool
+	ReleaseTemplate bool
+	EntryTemplate   bool
+	MaxChars        bool
+	OmissionNotice  bool
+	Metadata        bool
 }
 
 type VersioningConfig struct {
@@ -170,6 +183,94 @@ func (c Config) Validate() error {
 	return nil
 }
 
+func (p *RenderProfile) UnmarshalTOML(data any) error {
+	raw, ok := data.(map[string]any)
+	if !ok {
+		return fmt.Errorf("decode render profile: expected table, got %T", data)
+	}
+
+	for key, value := range raw {
+		switch key {
+		case "description":
+			text, err := asString(value)
+			if err != nil {
+				return fmt.Errorf("decode render profile description: %w", err)
+			}
+			p.Description = text
+			p.presence.Description = true
+		case "mode":
+			text, err := asString(value)
+			if err != nil {
+				return fmt.Errorf("decode render profile mode: %w", err)
+			}
+			p.Mode = text
+			p.presence.Mode = true
+		case "document_header":
+			text, err := asString(value)
+			if err != nil {
+				return fmt.Errorf("decode render profile document_header: %w", err)
+			}
+			p.DocumentHeader = text
+			p.presence.DocumentHeader = true
+		case "release_template":
+			text, err := asString(value)
+			if err != nil {
+				return fmt.Errorf("decode render profile release_template: %w", err)
+			}
+			p.ReleaseTemplate = text
+			p.presence.ReleaseTemplate = true
+		case "entry_template":
+			text, err := asString(value)
+			if err != nil {
+				return fmt.Errorf("decode render profile entry_template: %w", err)
+			}
+			p.EntryTemplate = text
+			p.presence.EntryTemplate = true
+		case "max_chars":
+			number, err := asInt(value)
+			if err != nil {
+				return fmt.Errorf("decode render profile max_chars: %w", err)
+			}
+			p.MaxChars = number
+			p.presence.MaxChars = true
+		case "omission_notice":
+			text, err := asString(value)
+			if err != nil {
+				return fmt.Errorf("decode render profile omission_notice: %w", err)
+			}
+			p.OmissionNotice = text
+			p.presence.OmissionNotice = true
+		case "metadata":
+			metadata, err := asStringMap(value)
+			if err != nil {
+				return fmt.Errorf("decode render profile metadata: %w", err)
+			}
+			p.Metadata = metadata
+			p.presence.Metadata = true
+		default:
+			return fmt.Errorf("decode render profile: unsupported key %q", key)
+		}
+	}
+	return nil
+}
+
+func (p RenderProfile) HasDescription() bool { return p.presence.Description || p.Description != "" }
+func (p RenderProfile) HasMode() bool        { return p.presence.Mode || p.Mode != "" }
+func (p RenderProfile) HasDocumentHeader() bool {
+	return p.presence.DocumentHeader || p.DocumentHeader != ""
+}
+func (p RenderProfile) HasReleaseTemplate() bool {
+	return p.presence.ReleaseTemplate || p.ReleaseTemplate != ""
+}
+func (p RenderProfile) HasEntryTemplate() bool {
+	return p.presence.EntryTemplate || p.EntryTemplate != ""
+}
+func (p RenderProfile) HasMaxChars() bool { return p.presence.MaxChars || p.MaxChars != 0 }
+func (p RenderProfile) HasOmissionNotice() bool {
+	return p.presence.OmissionNotice || p.OmissionNotice != ""
+}
+func (p RenderProfile) HasMetadata() bool { return p.presence.Metadata || p.Metadata != nil }
+
 func Write(path string, cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create config directory: %w", err)
@@ -194,4 +295,49 @@ func joinKeys(keys []toml.Key) string {
 		parts = append(parts, key.String())
 	}
 	return strings.Join(parts, ", ")
+}
+
+func asString(value any) (string, error) {
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("expected string, got %T", value)
+	}
+	return text, nil
+}
+
+func asInt(value any) (int, error) {
+	switch v := value.(type) {
+	case int64:
+		return int(v), nil
+	case int32:
+		return int(v), nil
+	case int:
+		return v, nil
+	case float64:
+		return int(v), nil
+	case string:
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, fmt.Errorf("expected integer, got %q", v)
+		}
+		return parsed, nil
+	default:
+		return 0, fmt.Errorf("expected integer, got %T", value)
+	}
+}
+
+func asStringMap(value any) (map[string]string, error) {
+	raw, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expected table, got %T", value)
+	}
+	out := make(map[string]string, len(raw))
+	for key, item := range raw {
+		text, err := asString(item)
+		if err != nil {
+			return nil, fmt.Errorf("key %q: %w", key, err)
+		}
+		out[key] = text
+	}
+	return out, nil
 }

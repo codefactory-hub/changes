@@ -590,6 +590,42 @@ func TestInitFailsWhenBootstrapArtifactsAlreadyExist(t *testing.T) {
 	}
 }
 
+func TestRenderProfilesSurfacesInvalidEffectiveProfileConfig(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 9, 30, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{1, 2, 3, 4})
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	cfgPath := config.RepoConfigPath(repoRoot)
+	raw, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	raw = append(raw, []byte("\n[render_profiles.github_release]\nmode = \"unsupported\"\n")...)
+	if err := os.WriteFile(cfgPath, raw, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err = app.Run(context.Background(), []string{"render", "profiles"})
+	if err == nil || !strings.Contains(stderr.String(), "unsupported mode") {
+		t.Fatalf("render profiles should surface the profile error:\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
+	}
+}
+
 func TestReleaseRequiresDecisionOutsideTTY(t *testing.T) {
 	repoRoot := t.TempDir()
 	gitInit(t, repoRoot)

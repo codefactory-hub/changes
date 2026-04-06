@@ -347,7 +347,11 @@ func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
 		return err
 	}
 
-	for _, pack := range render.AvailablePacks(cfg) {
+	packs, err := render.AvailablePacks(cfg)
+	if err != nil {
+		return err
+	}
+	for _, pack := range packs {
 		_, _ = fmt.Fprintf(a.Stdout, "%s\t%s\t%s\n", pack.Name, pack.Mode, pack.Description)
 	}
 	return nil

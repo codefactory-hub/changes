@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/example/changes/internal/config"
 )
 
@@ -55,6 +56,43 @@ func TestResolveProfilesMergesOverridesIntoBuiltIns(t *testing.T) {
 	}
 	if got := profile.Metadata["channel"]; got != "nightly" {
 		t.Fatalf("metadata[channel] = %q, want nightly", got)
+	}
+}
+
+func TestResolveProfilesAllowsClearingBuiltInFields(t *testing.T) {
+	cfg := config.Default()
+	raw := `
+[render_profiles.repository_markdown]
+document_header = ""
+max_chars = 0
+omission_notice = ""
+
+[render_profiles.debian_changelog.metadata]
+distribution = ""
+`
+	if _, err := toml.Decode(raw, &cfg); err != nil {
+		t.Fatalf("decode override config: %v", err)
+	}
+
+	profiles, err := ResolveProfiles(cfg)
+	if err != nil {
+		t.Fatalf("ResolveProfiles returned error: %v", err)
+	}
+
+	repoMarkdown := profiles[config.RenderProfileRepositoryMarkdown]
+	if repoMarkdown.DocumentHeader != "" {
+		t.Fatalf("document_header = %q, want empty", repoMarkdown.DocumentHeader)
+	}
+	if repoMarkdown.MaxChars != 0 {
+		t.Fatalf("max_chars = %d, want 0", repoMarkdown.MaxChars)
+	}
+	if repoMarkdown.OmissionNotice != "" {
+		t.Fatalf("omission_notice = %q, want empty", repoMarkdown.OmissionNotice)
+	}
+
+	debian := profiles[config.RenderProfileDebianChangelog]
+	if got := debian.Metadata["distribution"]; got != "" {
+		t.Fatalf("metadata[distribution] = %q, want empty", got)
 	}
 }
 
