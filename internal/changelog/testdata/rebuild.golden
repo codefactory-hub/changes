@@ -1,9 +1,13 @@
 # Changelog
 
 ## 0.2.0 (stable)
+
 ### Fixed
+
 - Fix render limits. Drops whole entries only.
 
 ## 0.1.0 (stable)
+
 ### Added
+
 - Bootstrap fragments. Added fragment storage.

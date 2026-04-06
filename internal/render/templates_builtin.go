@@ -1,53 +1,36 @@
 package render
 
-const DefaultRepositoryMarkdownReleaseTemplate = `## {{ .Release.Version }}
-{{- if .Release.IsPrerelease }} (prerelease){{ else }} (stable){{ end }}
+const DefaultRepositoryMarkdownReleaseTemplate = `## {{ .Release.Version }}{{ if .Release.IsPrerelease }} (prerelease){{ else }} (stable){{ end }}
 
-{{- if .Sections }}
-{{- range .Sections }}
-### {{ .Title }}
+{{ if .Sections }}{{ range .Sections }}### {{ .Title }}
 
-{{- range .Entries }}
-{{ . }}
-
-{{- end }}
-{{- end }}
-{{- else }}
+{{ range .Entries }}{{ . }}
+{{ end }}
+{{ end }}{{ else }}
 No entries selected for this release.
-{{- end }}
+{{ end }}
 `
 
-const DefaultGitHubReleaseTemplate = `# Release {{ .Release.Version }}
-{{- if .Release.IsPrerelease }} (targets {{ .Release.TargetVersion }}){{ end }}
-{{- if .Sections }}
+const DefaultGitHubReleaseTemplate = `# Release {{ .Release.Version }}{{ if .Release.IsPrerelease }} (targets {{ .Release.TargetVersion }}){{ end }}
 
-{{- range .Sections }}
-## {{ .Title }}
+{{ if .Sections }}{{ range .Sections }}## {{ .Title }}
 
-{{- range .Entries }}
-{{ . }}
-
-{{- end }}
-{{- end }}
-{{- else }}
+{{ range .Entries }}{{ . }}
+{{ end }}
+{{ end }}{{ else }}
 No entries selected for this release.
-{{- end }}
+{{ end }}
 `
 
 const DefaultTesterSummaryReleaseTemplate = `## Tester Summary For {{ .Release.Version }}
-{{- if .Sections }}
 
-{{- range .Sections }}
-### {{ .Title }}
+{{ if .Sections }}{{ range .Sections }}### {{ .Title }}
 
-{{- range .Entries }}
-{{ . }}
-
-{{- end }}
-{{- end }}
-{{- else }}
+{{ range .Entries }}{{ . }}
+{{ end }}
+{{ end }}{{ else }}
 No entries selected for testers.
-{{- end }}
+{{ end }}
 `
 
 const DefaultDebianChangelogTemplate = `changes ({{ .Release.Version }}) {{ metadata "distribution" "unstable" }}; urgency={{ metadata "urgency" "medium" }}

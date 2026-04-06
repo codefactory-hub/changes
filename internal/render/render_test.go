@@ -93,6 +93,9 @@ func TestRenderBuiltInPacksProduceDistinctOutput(t *testing.T) {
 	if !strings.Contains(githubOutput, "# Release 0.1.0") {
 		t.Fatalf("github output missing heading: %s", githubOutput)
 	}
+	if !strings.Contains(githubOutput, "# Release 0.1.0\n\n## Fixed\n\n- first body\n") {
+		t.Fatalf("github output should keep blank lines around headings: %q", githubOutput)
+	}
 	if !strings.Contains(githubOutput, "- first body") {
 		t.Fatalf("github output should render bullet entries: %s", githubOutput)
 	}
@@ -140,6 +143,9 @@ func TestRenderChainDropsWholeReleaseBlocks(t *testing.T) {
 
 	if !strings.Contains(output, "## 0.2.0 (stable)") {
 		t.Fatalf("output missing first release block: %s", output)
+	}
+	if !strings.Contains(output, "## 0.2.0 (stable)\n\n### Fixed\n\n- short\n") {
+		t.Fatalf("output should keep blank lines around repository headings: %q", output)
 	}
 	if strings.Contains(output, "long body to trigger omission") {
 		t.Fatalf("output should omit the second release block entirely: %s", output)
