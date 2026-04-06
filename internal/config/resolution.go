@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/BurntSushi/toml"
 )
 
 func ResolveAll(opts ResolveOptions) (Resolution, error) {
@@ -109,7 +107,7 @@ func inspectCandidate(scope Scope, style Style, paths LayoutPaths, opts ResolveO
 	}
 
 	manifestPath := filepath.Join(paths.Config, "layout.toml")
-	manifest, manifestExists, err := inspectManifestCandidate(manifestPath, scope, style, paths)
+	manifest, manifestExists, err := inspectManifestCandidate(manifestPath, scope, style, paths, opts)
 	if err != nil {
 		return Candidate{}, err
 	}
@@ -187,6 +185,7 @@ func globalPaths(style Style, opts ResolveOptions) LayoutPaths {
 			stateRoot = filepath.Join(homeDir, ".local", "state")
 		}
 		return LayoutPaths{
+			Root:   homeDir,
 			Config: filepath.Join(configRoot, "changes"),
 			Data:   filepath.Join(dataRoot, "changes"),
 			State:  filepath.Join(stateRoot, "changes"),
@@ -295,7 +294,7 @@ func candidateSignals(scope Scope, style Style, paths LayoutPaths, opts ResolveO
 	return evidence
 }
 
-func inspectManifestCandidate(path string, scope Scope, style Style, resolved LayoutPaths) (*LayoutManifest, bool, error) {
+func inspectManifestCandidate(path string, scope Scope, style Style, resolved LayoutPaths, opts ResolveOptions) (*LayoutManifest, bool, error) {
 	exists, err := fileExists(path)
 	if err != nil {
 		return nil, false, fmt.Errorf("inspect manifest: %w", err)
@@ -304,25 +303,15 @@ func inspectManifestCandidate(path string, scope Scope, style Style, resolved La
 		return nil, false, nil
 	}
 
-	var manifest struct {
-		SchemaVersion int   `toml:"schema_version"`
-		Scope         Scope `toml:"scope"`
-		Style         Style `toml:"style"`
+	manifest, err := loadLayoutManifest(path, scope, style, resolved, opts)
+	if err != nil {
+		if errors.Is(err, errInvalidLayoutManifest) {
+			return nil, true, nil
+		}
+		return nil, true, err
 	}
 
-	if _, err := toml.DecodeFile(path, &manifest); err != nil {
-		return nil, true, nil
-	}
-	if manifest.Scope != scope || manifest.Style != style {
-		return nil, true, nil
-	}
-
-	return &LayoutManifest{
-		SchemaVersion: manifest.SchemaVersion,
-		Scope:         manifest.Scope,
-		Style:         manifest.Style,
-		Resolved:      resolved,
-	}, true, nil
+	return manifest, true, nil
 }
 
 func fileExists(path string) (bool, error) {
