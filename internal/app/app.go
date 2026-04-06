@@ -18,10 +18,12 @@ import (
 )
 
 type InitializeRequest struct {
-	RepoRoot       string
-	CurrentVersion string
-	Now            time.Time
-	Random         io.Reader
+	RepoRoot        string
+	CurrentVersion  string
+	RequestedLayout string
+	RequestedHome   string
+	Now             time.Time
+	Random          io.Reader
 }
 
 type InitializeResult struct {

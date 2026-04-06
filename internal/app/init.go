@@ -54,6 +54,15 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 	if err != nil {
 		return InitializeResult{}, err
 	}
+	selection, selectionFromDefaults, err := selectInitializeLayout(req)
+	if err != nil {
+		return InitializeResult{}, err
+	}
+	if selectionFromDefaults {
+		cfg.Paths.DataDir = repoRelativeConfigPath(req.RepoRoot, selection.Data)
+		cfg.Paths.StateDir = repoRelativeConfigPath(req.RepoRoot, selection.State)
+		cfg.Paths.TemplatesDir = repoRelativeConfigPath(req.RepoRoot, filepath.Join(selection.Data, "templates"))
+	}
 	if strings.TrimSpace(cfg.Project.Name) == "" {
 		cfg.Project.Name = filepath.Base(req.RepoRoot)
 	}
@@ -77,14 +86,21 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 		}
 	}()
 
-	if err := tx.MkdirAll(filepath.Dir(config.RepoConfigPath(req.RepoRoot)), 0o755); err != nil {
+	configPath := filepath.Join(selection.Config, "config.toml")
+	layoutManifestPath := filepath.Join(selection.Config, "layout.toml")
+	templatesDir := filepath.Join(selection.Data, "templates")
+	promptsDir := filepath.Join(selection.Data, "prompts")
+	fragmentsDir := filepath.Join(selection.Data, "fragments")
+	releasesDir := filepath.Join(selection.Data, "releases")
+
+	if err := tx.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return InitializeResult{}, err
 	}
 	for _, dir := range []string{
-		config.FragmentsDir(req.RepoRoot, cfg),
-		config.ReleasesDir(req.RepoRoot, cfg),
-		config.PromptsDir(req.RepoRoot, cfg),
-		config.StateDir(req.RepoRoot, cfg),
+		fragmentsDir,
+		releasesDir,
+		promptsDir,
+		selection.State,
 	} {
 		if err := tx.MkdirAll(dir, 0o755); err != nil {
 			return InitializeResult{}, fmt.Errorf("create directory %s: %w", dir, err)
@@ -94,16 +110,27 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 		return InitializeResult{}, err
 	}
 
-	if _, statErr := os.Stat(config.RepoConfigPath(req.RepoRoot)); os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(configPath); os.IsNotExist(statErr) {
 		raw, encodeErr := encodeTOML(cfg)
 		if encodeErr != nil {
 			return InitializeResult{}, encodeErr
 		}
-		if err := tx.WriteFileExclusive(config.RepoConfigPath(req.RepoRoot), raw, 0o644); err != nil {
+		if err := tx.WriteFileExclusive(configPath, raw, 0o644); err != nil {
 			return InitializeResult{}, fmt.Errorf("write config: %w", err)
 		}
 	} else if statErr != nil {
 		return InitializeResult{}, fmt.Errorf("stat config: %w", statErr)
+	}
+	if _, statErr := os.Stat(layoutManifestPath); os.IsNotExist(statErr) {
+		raw, encodeErr := encodeTOML(repoLayoutManifest(selection, req.RepoRoot))
+		if encodeErr != nil {
+			return InitializeResult{}, encodeErr
+		}
+		if err := tx.WriteFileExclusive(layoutManifestPath, raw, 0o644); err != nil {
+			return InitializeResult{}, fmt.Errorf("write layout manifest: %w", err)
+		}
+	} else if statErr != nil {
+		return InitializeResult{}, fmt.Errorf("stat layout manifest: %w", statErr)
 	}
 
 	changelogPath := config.ChangelogPath(req.RepoRoot, cfg)
@@ -111,7 +138,7 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 		return InitializeResult{}, fmt.Errorf("write starter changelog: %w", err)
 	}
 
-	if err := ensureGitignoreWithTx(tx, req.RepoRoot); err != nil {
+	if err := ensureGitignoreWithTx(tx, req.RepoRoot, selection.GitignoreEntry); err != nil {
 		return InitializeResult{}, err
 	}
 	if deps.stageHook != nil {
@@ -152,11 +179,11 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 			Product:             cfg.Project.Name,
 			CurrentVersionLabel: currentVersionLabel,
 			ChangelogPath:       config.ChangelogPath(req.RepoRoot, cfg),
-			ConfigPath:          config.RepoConfigPath(req.RepoRoot),
-			FragmentsDir:        config.FragmentsDir(req.RepoRoot, cfg),
-			ReleasesDir:         config.ReleasesDir(req.RepoRoot, cfg),
-			TemplatesDir:        config.TemplatesDir(req.RepoRoot, cfg),
-			PromptPath:          config.HistoryImportPromptPath(req.RepoRoot, cfg),
+			ConfigPath:          configPath,
+			FragmentsDir:        fragmentsDir,
+			ReleasesDir:         releasesDir,
+			TemplatesDir:        templatesDir,
+			PromptPath:          filepath.Join(promptsDir, "release-history-import-llm-prompt.md"),
 			AdoptionRecordPath:  recordPath,
 			AdoptionFragment:    result.AdoptionFragment,
 			AdoptionRecord:      result.AdoptionRecord,
@@ -318,9 +345,8 @@ func ensureBootstrapArtifactsAbsent(repoRoot string, cfg config.Config) error {
 	return fmt.Errorf("init: bootstrap adoption artifacts already exist; review or remove them intentionally before re-running init: %s", strings.Join(paths, ", "))
 }
 
-func ensureGitignoreWithTx(tx *initTxn, repoRoot string) error {
+func ensureGitignoreWithTx(tx *initTxn, repoRoot, entry string) error {
 	path := filepath.Join(repoRoot, ".gitignore")
-	entry := "/.local/state/"
 
 	raw, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -345,6 +371,148 @@ func ensureGitignoreWithTx(tx *initTxn, repoRoot string) error {
 	return nil
 }
 
+type repoInitDefaultsDoc struct {
+	Repo struct {
+		Init struct {
+			Style string `toml:"style"`
+			Home  string `toml:"home"`
+		} `toml:"init"`
+	} `toml:"repo"`
+}
+
+type layoutManifestDoc struct {
+	SchemaVersion int    `toml:"schema_version"`
+	Scope         string `toml:"scope"`
+	Style         string `toml:"style"`
+	Layout        struct {
+		Root   string `toml:"root"`
+		Config string `toml:"config"`
+		Data   string `toml:"data"`
+		State  string `toml:"state"`
+	} `toml:"layout"`
+}
+
+func selectInitializeLayout(req InitializeRequest) (config.RepoInitSelection, bool, error) {
+	resolution, err := config.ResolveRepo(config.ResolveOptions{RepoRoot: req.RepoRoot})
+	if err != nil {
+		return config.RepoInitSelection{}, false, fmt.Errorf("init: resolve repo layout: %w", err)
+	}
+
+	switch resolution.Status {
+	case config.StatusResolved:
+		if resolution.Authoritative == nil {
+			return config.RepoInitSelection{}, false, fmt.Errorf("init: repo layout status %s has no authoritative candidate", resolution.Status)
+		}
+		return selectionFromCandidate(*resolution.Authoritative), false, nil
+	case config.StatusUninitialized:
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			homeDir = ""
+		}
+		globalStyle, globalHome, err := loadGlobalRepoInitDefaults(homeDir)
+		if err != nil {
+			return config.RepoInitSelection{}, false, err
+		}
+		selection, err := config.SelectRepoInitLayout(config.RepoInitSelectionOptions{
+			RepoRoot:        req.RepoRoot,
+			RequestedStyle:  req.RequestedLayout,
+			RequestedHome:   req.RequestedHome,
+			GlobalInitStyle: globalStyle,
+			GlobalInitHome:  globalHome,
+			ChangesHome:     os.Getenv("CHANGES_HOME"),
+			XDGConfigHome:   os.Getenv("XDG_CONFIG_HOME"),
+			XDGDataHome:     os.Getenv("XDG_DATA_HOME"),
+			XDGStateHome:    os.Getenv("XDG_STATE_HOME"),
+		})
+		if err != nil {
+			return config.RepoInitSelection{}, false, err
+		}
+		return selection, true, nil
+	case config.StatusLegacyOnly, config.StatusAmbiguous, config.StatusInvalid:
+		return config.RepoInitSelection{}, false, fmt.Errorf("init: repo layout status %s must be resolved before initialization", resolution.Status)
+	default:
+		return config.RepoInitSelection{}, false, fmt.Errorf("init: repo layout status %s is not supported", resolution.Status)
+	}
+}
+
+func selectionFromCandidate(candidate config.Candidate) config.RepoInitSelection {
+	gitignoreEntry := "/.local/state/"
+	if candidate.Style == config.StyleHome {
+		gitignoreEntry = "/.changes/state/"
+	}
+	return config.RepoInitSelection{
+		Style:          candidate.Style,
+		Root:           candidate.Paths.Root,
+		Config:         candidate.Paths.Config,
+		Data:           candidate.Paths.Data,
+		State:          candidate.Paths.State,
+		GitignoreEntry: gitignoreEntry,
+	}
+}
+
+func loadGlobalRepoInitDefaults(homeDir string) (string, string, error) {
+	opts := config.ResolveOptions{
+		HomeDir:       homeDir,
+		ChangesHome:   os.Getenv("CHANGES_HOME"),
+		XDGConfigHome: os.Getenv("XDG_CONFIG_HOME"),
+		XDGDataHome:   os.Getenv("XDG_DATA_HOME"),
+		XDGStateHome:  os.Getenv("XDG_STATE_HOME"),
+	}
+	resolution, err := config.ResolveGlobal(opts)
+	if err != nil {
+		return "", "", fmt.Errorf("init: resolve global config: %w", err)
+	}
+	if resolution.Status != config.StatusResolved || resolution.Authoritative == nil {
+		return "", "", nil
+	}
+
+	path := filepath.Join(resolution.Authoritative.Paths.Config, "config.toml")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", "", nil
+		}
+		return "", "", fmt.Errorf("init: read global config: %w", err)
+	}
+
+	var doc repoInitDefaultsDoc
+	if _, err := toml.Decode(string(raw), &doc); err != nil {
+		return "", "", fmt.Errorf("init: decode global config repo.init defaults: %w", err)
+	}
+	return doc.Repo.Init.Style, doc.Repo.Init.Home, nil
+}
+
+func repoLayoutManifest(selection config.RepoInitSelection, repoRoot string) layoutManifestDoc {
+	doc := layoutManifestDoc{
+		SchemaVersion: 1,
+		Scope:         string(config.ScopeRepo),
+		Style:         string(selection.Style),
+	}
+
+	switch selection.Style {
+	case config.StyleHome:
+		doc.Layout.Root = repoSymbolicPath(repoRoot, selection.Root)
+		doc.Layout.Config = "$layout.root/config"
+		doc.Layout.Data = "$layout.root/data"
+		doc.Layout.State = "$layout.root/state"
+	default:
+		doc.Layout.Root = "$REPO_ROOT"
+		doc.Layout.Config = "$REPO_ROOT/.config/changes"
+		doc.Layout.Data = "$REPO_ROOT/.local/share/changes"
+		doc.Layout.State = "$REPO_ROOT/.local/state/changes"
+	}
+
+	return doc
+}
+
+func repoSymbolicPath(repoRoot, absolute string) string {
+	rel, err := filepath.Rel(repoRoot, absolute)
+	if err != nil || rel == "." {
+		return "$REPO_ROOT"
+	}
+	return "$REPO_ROOT/" + filepath.ToSlash(rel)
+}
+
 func encodeTOML(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := toml.NewEncoder(&buf).Encode(v); err != nil {
@@ -358,6 +526,10 @@ func repoRelativePath(repoRoot, path string) string {
 		return rel
 	}
 	return path
+}
+
+func repoRelativeConfigPath(repoRoot, path string) string {
+	return filepath.ToSlash(repoRelativePath(repoRoot, path))
 }
 
 type initTxn struct {
