@@ -15,7 +15,7 @@
 
 - [x] **REPO-01**: `changes` can resolve repo-local config, data, and state paths from either the default repo-local XDG-style layout or a declared single-root repo-local layout
 - [ ] **REPO-02**: `changes init` can choose the repo-local layout style using a clean, documented command shape
-- [ ] **REPO-03**: Repo-local layout selection rules are deterministic when no existing repo-local layout artifacts are present
+- [x] **REPO-03**: Repo-local layout selection rules are deterministic when no existing repo-local layout artifacts are present
 
 ### Ambiguity and Authority
 
@@ -64,7 +64,7 @@
 | GLBL-03 | Phase 4 | Pending |
 | REPO-01 | Phase 2 | Complete |
 | REPO-02 | Phase 4 | Pending |
-| REPO-03 | Phase 2 | Pending |
+| REPO-03 | Phase 2 | Complete |
 | AUTH-01 | Phase 3 | Pending |
 | AUTH-02 | Phase 3 | Pending |
 | AUTH-03 | Phase 4 | Pending |
