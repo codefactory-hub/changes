@@ -22,6 +22,7 @@ type ReleaseSection struct {
 type ReleaseRecord struct {
 	Product          string           `toml:"product" json:"product"`
 	Version          string           `toml:"version" json:"version"`
+	Bootstrap        bool             `toml:"bootstrap" json:"bootstrap,omitempty"`
 	ParentVersion    string           `toml:"parent_version" json:"parent_version,omitempty"`
 	CreatedAt        time.Time        `toml:"created_at" json:"created_at"`
 	AddedFragmentIDs []string         `toml:"added_fragment_ids" json:"added_fragment_ids,omitempty"`
@@ -36,6 +37,7 @@ type ReleaseRecord struct {
 type releaseRecordFile struct {
 	Product          string           `toml:"product"`
 	Version          string           `toml:"version"`
+	Bootstrap        bool             `toml:"bootstrap,omitempty"`
 	ParentVersion    *string          `toml:"parent_version,omitempty"`
 	CreatedAt        time.Time        `toml:"created_at"`
 	AddedFragmentIDs []string         `toml:"added_fragment_ids,omitempty"`
@@ -160,6 +162,9 @@ func (r ReleaseRecord) Validate() error {
 	}
 
 	if r.IsCompanionRecord() {
+		if r.Bootstrap {
+			return fmt.Errorf("companion release record %s must not be marked bootstrap", r.Version)
+		}
 		if strings.TrimSpace(r.CompanionPurpose) == "" {
 			return fmt.Errorf("companion release record %s must set companion_purpose", r.Version)
 		}
@@ -503,6 +508,7 @@ func (r ReleaseRecord) toFile() releaseRecordFile {
 	file := releaseRecordFile{
 		Product:          r.Product,
 		Version:          r.Version,
+		Bootstrap:        r.Bootstrap,
 		CreatedAt:        r.CreatedAt,
 		AddedFragmentIDs: slices.Clone(r.AddedFragmentIDs),
 		DisplayTitle:     r.DisplayTitle,
@@ -523,6 +529,7 @@ func (r releaseRecordFile) toReleaseRecord() ReleaseRecord {
 	record := ReleaseRecord{
 		Product:          r.Product,
 		Version:          r.Version,
+		Bootstrap:        r.Bootstrap,
 		CreatedAt:        r.CreatedAt,
 		AddedFragmentIDs: slices.Clone(r.AddedFragmentIDs),
 		DisplayTitle:     r.DisplayTitle,

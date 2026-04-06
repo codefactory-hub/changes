@@ -150,6 +150,14 @@ func TemplatesDir(repoRoot string, cfg Config) string {
 	return filepath.Join(repoRoot, cfg.Paths.TemplatesDir)
 }
 
+func PromptsDir(repoRoot string, cfg Config) string {
+	return filepath.Join(repoRoot, cfg.Paths.DataDir, "prompts")
+}
+
+func HistoryImportPromptPath(repoRoot string, cfg Config) string {
+	return filepath.Join(PromptsDir(repoRoot, cfg), "release-history-import-llm-prompt.md")
+}
+
 func StateDir(repoRoot string, cfg Config) string {
 	return filepath.Join(repoRoot, cfg.Paths.StateDir)
 }

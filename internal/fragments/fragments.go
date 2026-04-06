@@ -37,6 +37,7 @@ type Metadata struct {
 	Title                string    `toml:"title"`
 	Type                 string    `toml:"type"`
 	Bump                 string    `toml:"bump"`
+	Bootstrap            bool      `toml:"bootstrap"`
 	PublicAPI            string    `toml:"public_api"`
 	Behavior             string    `toml:"behavior"`
 	Dependency           string    `toml:"dependency"`
@@ -65,6 +66,7 @@ type NewInput struct {
 	NameStem             string
 	Type                 string
 	Bump                 versioning.Bump
+	Bootstrap            bool
 	PublicAPI            string
 	Behavior             string
 	Dependency           string
@@ -94,6 +96,7 @@ func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader,
 			CreatedAt:            now.UTC().Truncate(time.Second),
 			Type:                 normalizeType(input.Type),
 			Bump:                 string(input.Bump),
+			Bootstrap:            input.Bootstrap,
 			PublicAPI:            normalizePublicAPI(input.PublicAPI),
 			Behavior:             normalizeBehavior(input.Behavior),
 			Dependency:           normalizeDependency(input.Dependency),
@@ -288,6 +291,7 @@ func (f Fragment) Format() string {
 	var metadata struct {
 		Type                 string   `toml:"type"`
 		Bump                 string   `toml:"bump"`
+		Bootstrap            bool     `toml:"bootstrap,omitempty"`
 		PublicAPI            string   `toml:"public_api,omitempty"`
 		Behavior             string   `toml:"behavior,omitempty"`
 		Dependency           string   `toml:"dependency,omitempty"`
@@ -307,6 +311,7 @@ func (f Fragment) Format() string {
 	}
 	metadata.Type = normalizeType(f.Type)
 	metadata.Bump = strings.TrimSpace(f.Bump)
+	metadata.Bootstrap = f.Bootstrap
 	metadata.PublicAPI = normalizePublicAPI(f.PublicAPI)
 	metadata.Behavior = normalizeBehavior(f.Behavior)
 	metadata.Dependency = normalizeDependency(f.Dependency)

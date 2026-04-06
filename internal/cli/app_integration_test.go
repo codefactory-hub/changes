@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/example/changes/internal/config"
+	"github.com/example/changes/internal/fragments"
 	"github.com/example/changes/internal/releases"
 )
 
@@ -34,6 +35,7 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 
 	assertExists(t, filepath.Join(repoRoot, ".config/changes/config.toml"))
+	assertExists(t, config.HistoryImportPromptPath(repoRoot, config.Default()))
 	assertExists(t, filepath.Join(repoRoot, ".local/share/changes/templates/repository-markdown-release.md.tmpl"))
 
 	gitignore, err := os.ReadFile(filepath.Join(repoRoot, ".gitignore"))
@@ -406,6 +408,241 @@ func TestStatusExplainShowsPolicyEvidence(t *testing.T) {
 	}
 }
 
+func TestInitDefaultsToUnreleasedAndCreatesPromptOnly(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 8, 0, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{1, 2, 3, 4})
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	cfg, err := config.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	promptPath := config.HistoryImportPromptPath(repoRoot, cfg)
+	assertExists(t, promptPath)
+
+	records, err := releases.List(repoRoot, cfg)
+	if err != nil {
+		t.Fatalf("list release records: %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("unexpected release records: %#v", records)
+	}
+}
+
+func TestInitCurrentVersionCreatesAdoptionBootstrap(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 8, 30, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{5, 6, 7, 8, 9, 10})
+
+	if err := app.Run(context.Background(), []string{"init", "--current-version", "2.7.4"}); err != nil {
+		t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	cfg, err := config.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	promptPath := config.HistoryImportPromptPath(repoRoot, cfg)
+	assertExists(t, promptPath)
+
+	promptBytes, err := os.ReadFile(promptPath)
+	if err != nil {
+		t.Fatalf("read prompt: %v", err)
+	}
+	prompt := string(promptBytes)
+	if !strings.Contains(prompt, "Current version supplied during `changes init`: `2.7.4`") {
+		t.Fatalf("prompt missing current version context:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "Standard adoption release exists: yes (`2.7.4`)") {
+		t.Fatalf("prompt missing adoption bootstrap context:\n%s", prompt)
+	}
+
+	records, err := releases.List(repoRoot, cfg)
+	if err != nil {
+		t.Fatalf("list release records: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("release record count = %d, want 1", len(records))
+	}
+	record := records[0]
+	if !record.Bootstrap || record.Version != "2.7.4" {
+		t.Fatalf("unexpected bootstrap record: %#v", record)
+	}
+	if len(record.AddedFragmentIDs) != 1 {
+		t.Fatalf("bootstrap added_fragment_ids = %#v, want 1", record.AddedFragmentIDs)
+	}
+
+	allFragments, err := fragments.List(repoRoot, cfg)
+	if err != nil {
+		t.Fatalf("list fragments: %v", err)
+	}
+	if len(allFragments) != 1 {
+		t.Fatalf("fragment count = %d, want 1", len(allFragments))
+	}
+	if !allFragments[0].Bootstrap {
+		t.Fatalf("expected bootstrap fragment, got %#v", allFragments[0].Metadata)
+	}
+	if !strings.Contains(allFragments[0].Body, "adopted `changes` at version 2.7.4") {
+		t.Fatalf("unexpected bootstrap fragment body:\n%s", allFragments[0].Body)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"status"}); err != nil {
+		t.Fatalf("status returned error: %v", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "Unreleased fragments: 0") || !strings.Contains(got, "Recommended next stable: 2.7.4") {
+		t.Fatalf("unexpected status output:\n%s", got)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"render", "--version", "2.7.4", "--profile", config.RenderProfileGitHubRelease}); err != nil {
+		t.Fatalf("render returned error: %v", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "adopted `changes` at version 2.7.4") {
+		t.Fatalf("render missing adoption text:\n%s", got)
+	}
+
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 9, 0, 0, 0, time.UTC)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"patch",
+		"--behavior", "fix",
+		"Fix the first post-adoption bug.",
+	}); err != nil {
+		t.Fatalf("create returned error: %v", err)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"status"}); err != nil {
+		t.Fatalf("status after create returned error: %v", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "Recommended next stable: 2.7.5") {
+		t.Fatalf("unexpected post-adoption status:\n%s", got)
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"release", "--yes"}); err != nil {
+		t.Fatalf("release returned error: %v", err)
+	}
+	releasePath := strings.TrimSpace(strings.Split(stdout.String(), "\n")[0])
+	released, err := releases.Load(releasePath)
+	if err != nil {
+		t.Fatalf("load post-adoption release: %v", err)
+	}
+	if released.Version != "2.7.5" || released.ParentVersion != "2.7.4" {
+		t.Fatalf("unexpected post-adoption release record: %#v", released)
+	}
+}
+
+func TestInitTreatsZeroVersionAsUnreleased(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 8, 45, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{3, 4, 5, 6})
+
+	if err := app.Run(context.Background(), []string{"init", "--current-version", "0.0.0"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	cfg, err := config.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	records, err := releases.List(repoRoot, cfg)
+	if err != nil {
+		t.Fatalf("list release records: %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("0.0.0 should behave like unreleased; got %#v", records)
+	}
+}
+
+func TestInitPromptsForCurrentVersionInTTY(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 8, 50, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{7, 7, 7})
+	app.IsTTY = func() bool { return true }
+	app.Stdin = strings.NewReader("\n")
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "Current released version [unreleased]: ") {
+		t.Fatalf("missing init prompt:\n%s", stderr.String())
+	}
+}
+
+func TestInitFailsWhenBootstrapArtifactsAlreadyExist(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 9, 15, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{1, 1, 1, 1})
+
+	if err := app.Run(context.Background(), []string{"init", "--current-version", "2.7.4"}); err != nil {
+		t.Fatalf("first init returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err := app.Run(context.Background(), []string{"init"})
+	if err == nil {
+		t.Fatalf("re-init should fail once bootstrap artifacts exist")
+	}
+	if !strings.Contains(stderr.String(), "bootstrap adoption artifacts already exist") {
+		t.Fatalf("unexpected stderr:\n%s", stderr.String())
+	}
+}
+
 func TestReleaseRequiresDecisionOutsideTTY(t *testing.T) {
 	repoRoot := t.TempDir()
 	gitInit(t, repoRoot)
@@ -592,7 +829,7 @@ func TestCreatePromptsForMissingFieldsInTTY(t *testing.T) {
 	}
 	app.Random = bytes.NewReader([]byte{1, 2, 3})
 	app.IsTTY = func() bool { return true }
-	app.Stdin = strings.NewReader("did-something-cool\nThe whirly-gig no longer breaks on Thursdays.\n")
+	app.Stdin = strings.NewReader("\n")
 
 	if err := app.Run(context.Background(), []string{"init"}); err != nil {
 		t.Fatalf("init returned error: %v", err)
@@ -600,6 +837,7 @@ func TestCreatePromptsForMissingFieldsInTTY(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
+	app.Stdin = strings.NewReader("did-something-cool\nThe whirly-gig no longer breaks on Thursdays.\n")
 	if err := app.Run(context.Background(), []string{"create", "minor"}); err != nil {
 		t.Fatalf("interactive create returned error: %v\nstderr=%s", err, stderr.String())
 	}
@@ -633,7 +871,7 @@ func TestCreateEditUsesScaffoldedFrontMatter(t *testing.T) {
 	}
 	app.Random = bytes.NewReader([]byte{4, 5, 6})
 	app.IsTTY = func() bool { return true }
-	app.Stdin = strings.NewReader("did-something-cool\n")
+	app.Stdin = strings.NewReader("\n")
 	app.EditFile = func(path string) error {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -652,6 +890,7 @@ func TestCreateEditUsesScaffoldedFrontMatter(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
+	app.Stdin = strings.NewReader("did-something-cool\n")
 	if err := app.Run(context.Background(), []string{"create", "minor", "--edit"}); err != nil {
 		t.Fatalf("create --edit returned error: %v\nstderr=%s", err, stderr.String())
 	}

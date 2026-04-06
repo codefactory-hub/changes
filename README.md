@@ -22,6 +22,7 @@ Committed:
 
 - `.config/changes/config.toml`
 - `.local/share/changes/fragments/`
+- `.local/share/changes/prompts/`
 - `.local/share/changes/releases/`
 - `.local/share/changes/templates/`
 
@@ -34,7 +35,7 @@ The tool always resolves the target repository root from Git. If a command runs 
 ## Current command surface
 
 ```text
-changes init
+changes init [--current-version <semver|unreleased>]
 changes create patch --behavior fix "Fix release note rendering."
 changes create minor --edit
 changes status
@@ -51,6 +52,12 @@ changes changelog rebuild [--output path]
 ```
 
 Interactive authoring prompts for optional `name` stem and body text when you run `create` in a TTY. Use `--edit` when the body needs richer Markdown than a single prompt line.
+
+`changes init` can also bootstrap an already-released product:
+
+- `changes init --current-version unreleased` starts a new repository with no adoption release record
+- `changes init --current-version 2.7.4` creates a standard adoption release and fragment at `2.7.4`
+- init always generates `.local/share/changes/prompts/release-history-import-llm-prompt.md` as a repo-specific starting point for an LLM-assisted historical import workflow
 
 ## Fragment vocabulary
 

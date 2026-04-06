@@ -98,8 +98,11 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 		a.printHelp([]string{"init"})
 		return nil
 	}
+	a.promptIn = nil
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	var currentVersionArg string
+	fs.StringVar(&currentVersionArg, "current-version", "", "Current released version or unreleased")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -110,13 +113,28 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 	}
 
 	cfg := config.Default()
+	if _, err := os.Stat(config.RepoConfigPath(repoRoot)); err == nil {
+		cfg, err = config.Load(repoRoot)
+		if err != nil {
+			return err
+		}
+	}
 	if cfg.Project.Name == "" {
 		cfg.Project.Name = filepath.Base(repoRoot)
+	}
+	if err := ensureBootstrapArtifactsAbsent(repoRoot, cfg); err != nil {
+		return err
+	}
+
+	currentVersionLabel, currentVersion, err := a.resolveInitCurrentVersion(currentVersionArg)
+	if err != nil {
+		return err
 	}
 
 	for _, dir := range []string{
 		config.FragmentsDir(repoRoot, cfg),
 		config.ReleasesDir(repoRoot, cfg),
+		config.PromptsDir(repoRoot, cfg),
 		config.TemplatesDir(repoRoot, cfg),
 		config.StateDir(repoRoot, cfg),
 	} {
@@ -146,7 +164,46 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 		return err
 	}
 
+	var adoptionFragment *fragments.Fragment
+	var adoptionRecord *releases.ReleaseRecord
+	var adoptionRecordPath string
+	records, err := releases.List(repoRoot, cfg)
+	if err != nil {
+		return err
+	}
+	if currentVersion != nil && releases.LatestFinalHeadForProduct(records, cfg.Project.Name) == nil {
+		fragment, record, recordPath, err := a.createAdoptionBootstrap(repoRoot, cfg, *currentVersion, records)
+		if err != nil {
+			return err
+		}
+		adoptionFragment = &fragment
+		adoptionRecord = &record
+		adoptionRecordPath = recordPath
+	}
+
+	promptPath, err := writeHistoryImportPrompt(repoRoot, cfg, historyImportPromptData{
+		Product:             cfg.Project.Name,
+		CurrentVersionLabel: currentVersionLabel,
+		ChangelogPath:       config.ChangelogPath(repoRoot, cfg),
+		ConfigPath:          config.RepoConfigPath(repoRoot),
+		FragmentsDir:        config.FragmentsDir(repoRoot, cfg),
+		ReleasesDir:         config.ReleasesDir(repoRoot, cfg),
+		TemplatesDir:        config.TemplatesDir(repoRoot, cfg),
+		PromptPath:          config.HistoryImportPromptPath(repoRoot, cfg),
+		AdoptionRecordPath:  adoptionRecordPath,
+		AdoptionFragment:    adoptionFragment,
+		AdoptionRecord:      adoptionRecord,
+	})
+	if err != nil {
+		return err
+	}
+
 	_, _ = fmt.Fprintf(a.Stdout, "initialized %s\n", repoRoot)
+	if adoptionRecord != nil {
+		_, _ = fmt.Fprintf(a.Stdout, "next step: review %s to replace or refine the standard adoption history.\n", repoRelativePath(repoRoot, promptPath))
+		return nil
+	}
+	_, _ = fmt.Fprintf(a.Stdout, "next step: review %s if you want help reconstructing historical release history.\n", repoRelativePath(repoRoot, promptPath))
 	return nil
 }
 
@@ -626,9 +683,9 @@ Use "changes help <command>" or "changes <command> --help" for details.
 	case "init":
 		body = strings.TrimSpace(`
 Usage:
-  changes init
+  changes init [--current-version <semver|unreleased>]
 
-Initialize repo-local config, templates, changelog, and state directories.
+Initialize repo-local config, templates, changelog, prompts, and state directories.
 `)
 	case "create":
 		body = strings.TrimSpace(`
@@ -962,6 +1019,184 @@ func renderReleaseDecisionSummary(w io.Writer, pending []fragments.Fragment, rec
 	}
 	renderRecommendationExplanation(w, recommendation)
 	_, _ = fmt.Fprintf(w, "Default release: %s\n", releaseVersion.String())
+}
+
+type historyImportPromptData struct {
+	Product             string
+	CurrentVersionLabel string
+	ChangelogPath       string
+	ConfigPath          string
+	FragmentsDir        string
+	ReleasesDir         string
+	TemplatesDir        string
+	PromptPath          string
+	AdoptionRecordPath  string
+	AdoptionFragment    *fragments.Fragment
+	AdoptionRecord      *releases.ReleaseRecord
+}
+
+func ensureBootstrapArtifactsAbsent(repoRoot string, cfg config.Config) error {
+	paths := make([]string, 0, 3)
+	promptPath := config.HistoryImportPromptPath(repoRoot, cfg)
+	if _, err := os.Stat(promptPath); err == nil {
+		paths = append(paths, repoRelativePath(repoRoot, promptPath))
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("check bootstrap prompt artifact: %w", err)
+	}
+
+	records, err := releases.List(repoRoot, cfg)
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if record.Bootstrap {
+			paths = append(paths, repoRelativePath(repoRoot, releases.RecordPath(repoRoot, cfg, record.Product, record.Version)))
+		}
+	}
+
+	allFragments, err := fragments.List(repoRoot, cfg)
+	if err != nil {
+		return err
+	}
+	for _, item := range allFragments {
+		if item.Bootstrap {
+			paths = append(paths, repoRelativePath(repoRoot, item.Path))
+		}
+	}
+
+	if len(paths) == 0 {
+		return nil
+	}
+	slices.Sort(paths)
+	return fmt.Errorf("init: bootstrap adoption artifacts already exist; review or remove them intentionally before re-running init: %s", strings.Join(paths, ", "))
+}
+
+func (a *App) resolveInitCurrentVersion(raw string) (string, *versioning.Version, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		if a.isTTY() {
+			answer, err := a.promptOptionalLine("Current released version [unreleased]: ")
+			if err != nil {
+				return "", nil, err
+			}
+			value = strings.TrimSpace(answer)
+		}
+		if value == "" {
+			value = "unreleased"
+		}
+	}
+
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "", "unreleased", "0.0.0":
+		return "unreleased", nil, nil
+	}
+
+	parsed, err := versioning.Parse(value)
+	if err != nil {
+		return "", nil, fmt.Errorf("init: --current-version must be a stable semver or unreleased: %w", err)
+	}
+	if parsed.IsPrerelease() || parsed.BuildMetadata != "" {
+		return "", nil, fmt.Errorf("init: --current-version must be a stable semver or unreleased")
+	}
+	return parsed.String(), &parsed, nil
+}
+
+func (a *App) createAdoptionBootstrap(repoRoot string, cfg config.Config, currentVersion versioning.Version, existing []releases.ReleaseRecord) (fragments.Fragment, releases.ReleaseRecord, string, error) {
+	body := fmt.Sprintf(
+		"This repository adopted `changes` at version %s.\n\nThis entry establishes the release-history boundary for `changes`. Historical releases before %s may be reconstructed or refined later.",
+		currentVersion.String(),
+		currentVersion.String(),
+	)
+	item, err := fragments.Create(repoRoot, cfg, a.Now(), a.Random, fragments.NewInput{
+		NameStem:  "changes-adoption",
+		Type:      "changed",
+		Bump:      versioning.BumpNone,
+		Bootstrap: true,
+		Body:      body,
+	})
+	if err != nil {
+		return fragments.Fragment{}, releases.ReleaseRecord{}, "", err
+	}
+
+	record := releases.ReleaseRecord{
+		Product:          cfg.Project.Name,
+		Version:          currentVersion.String(),
+		Bootstrap:        true,
+		CreatedAt:        a.Now().UTC().Truncate(time.Second),
+		AddedFragmentIDs: []string{item.ID},
+		Summary:          fmt.Sprintf("Adopted `changes` metadata at version %s.", currentVersion.String()),
+	}
+	if err := releases.ValidateSet(append(slices.Clone(existing), record)); err != nil {
+		_ = os.Remove(item.Path)
+		return fragments.Fragment{}, releases.ReleaseRecord{}, "", err
+	}
+	path, err := releases.Write(repoRoot, cfg, record)
+	if err != nil {
+		_ = os.Remove(item.Path)
+		return fragments.Fragment{}, releases.ReleaseRecord{}, "", err
+	}
+	return item, record, path, nil
+}
+
+func writeHistoryImportPrompt(repoRoot string, cfg config.Config, data historyImportPromptData) (string, error) {
+	path := config.HistoryImportPromptPath(repoRoot, cfg)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("create prompt directory: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(renderHistoryImportPrompt(repoRoot, data)), 0o644); err != nil {
+		return "", fmt.Errorf("write history-import prompt: %w", err)
+	}
+	return path, nil
+}
+
+func renderHistoryImportPrompt(repoRoot string, data historyImportPromptData) string {
+	var builder strings.Builder
+	builder.WriteString("# Release History Import Prompt for `changes`\n\n")
+	builder.WriteString("You are helping migrate historical release history into the `changes` data model for this repository.\n\n")
+	builder.WriteString("## Repo-specific context\n")
+	builder.WriteString(fmt.Sprintf("- Product name: `%s`\n", data.Product))
+	builder.WriteString(fmt.Sprintf("- Current version supplied during `changes init`: `%s`\n", data.CurrentVersionLabel))
+	builder.WriteString(fmt.Sprintf("- Config file: `%s`\n", repoRelativePath(repoRoot, data.ConfigPath)))
+	builder.WriteString(fmt.Sprintf("- Fragments directory: `%s`\n", repoRelativePath(repoRoot, data.FragmentsDir)))
+	builder.WriteString(fmt.Sprintf("- Releases directory: `%s`\n", repoRelativePath(repoRoot, data.ReleasesDir)))
+	builder.WriteString(fmt.Sprintf("- Templates directory: `%s`\n", repoRelativePath(repoRoot, data.TemplatesDir)))
+	builder.WriteString(fmt.Sprintf("- Changelog path: `%s`\n", repoRelativePath(repoRoot, data.ChangelogPath)))
+	builder.WriteString(fmt.Sprintf("- Prompt file: `%s`\n", repoRelativePath(repoRoot, data.PromptPath)))
+	if data.AdoptionRecord != nil && data.AdoptionFragment != nil {
+		builder.WriteString(fmt.Sprintf("- Standard adoption release exists: yes (`%s`)\n", data.AdoptionRecord.Version))
+		builder.WriteString(fmt.Sprintf("- Adoption release record path: `%s`\n", repoRelativePath(repoRoot, data.AdoptionRecordPath)))
+		builder.WriteString(fmt.Sprintf("- Adoption fragment path: `%s`\n", repoRelativePath(repoRoot, data.AdoptionFragment.Path)))
+	} else {
+		builder.WriteString("- Standard adoption release exists: no\n")
+	}
+
+	builder.WriteString("\n## `changes` model\n")
+	builder.WriteString("- Fragments are Markdown files with TOML front matter stored under the fragments directory.\n")
+	builder.WriteString("- Release records are TOML files stored under the releases directory.\n")
+	builder.WriteString("- A base release record selects fragment IDs and establishes lineage with `parent_version`.\n")
+	builder.WriteString("- Rendered changelogs and release notes are generated from fragments plus release records.\n")
+
+	builder.WriteString("\n## Task\n")
+	builder.WriteString("Investigate the repository's existing evidence, such as git history, tags, changelog content, or prior release notes, and decide what historical release records and fragments should exist before the current adoption point.\n")
+	builder.WriteString("Create or revise historical fragments and release records so the repository's pre-adoption release history is represented intentionally and coherently.\n")
+	if data.AdoptionRecord != nil && data.AdoptionFragment != nil {
+		builder.WriteString("A standard adoption release and fragment already exist as a placeholder starting point. Replace or refine that bootstrap history intentionally rather than layering duplicate history on top of it.\n")
+	}
+
+	builder.WriteString("\n## Constraints\n")
+	builder.WriteString("- Do not invent unsupported semantics or rewrite history casually.\n")
+	builder.WriteString("- Preserve valid `changes` file formats and release lineage.\n")
+	builder.WriteString("- Prefer explicit release records and fragments over vague summaries.\n")
+	builder.WriteString("- If evidence is incomplete, be clear about uncertainty instead of fabricating precision.\n")
+	builder.WriteString("- Do not change templates or config unless they are directly relevant to representing release history.\n")
+	return builder.String()
+}
+func repoRelativePath(repoRoot, path string) string {
+	if rel, err := filepath.Rel(repoRoot, path); err == nil {
+		return rel
+	}
+	return path
 }
 
 func ensureGitignore(repoRoot string) error {
