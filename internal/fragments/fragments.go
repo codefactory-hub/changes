@@ -37,6 +37,10 @@ type Metadata struct {
 	Title                string    `toml:"title"`
 	Type                 string    `toml:"type"`
 	Bump                 string    `toml:"bump"`
+	PublicAPI            string    `toml:"public_api"`
+	Behavior             string    `toml:"behavior"`
+	Dependency           string    `toml:"dependency"`
+	Runtime              string    `toml:"runtime"`
 	Breaking             bool      `toml:"breaking"`
 	Scopes               []string  `toml:"scopes"`
 	Authors              []string  `toml:"authors"`
@@ -58,8 +62,13 @@ type Fragment struct {
 }
 
 type NewInput struct {
+	NameStem             string
 	Type                 string
 	Bump                 versioning.Bump
+	PublicAPI            string
+	Behavior             string
+	Dependency           string
+	Runtime              string
 	Breaking             bool
 	Scopes               []string
 	Authors              []string
@@ -85,6 +94,10 @@ func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader,
 			CreatedAt:            now.UTC().Truncate(time.Second),
 			Type:                 normalizeType(input.Type),
 			Bump:                 string(input.Bump),
+			PublicAPI:            normalizePublicAPI(input.PublicAPI),
+			Behavior:             normalizeBehavior(input.Behavior),
+			Dependency:           normalizeDependency(input.Dependency),
+			Runtime:              normalizeRuntime(input.Runtime),
 			Breaking:             input.Breaking,
 			Scopes:               slices.Clone(input.Scopes),
 			Authors:              slices.Clone(input.Authors),
@@ -100,6 +113,10 @@ func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader,
 		},
 		Body: strings.TrimSpace(input.Body),
 	}
+	nameStem, err := NormalizeNameStem(input.NameStem)
+	if err != nil {
+		return Fragment{}, err
+	}
 
 	if err := item.Validate(); err != nil {
 		return Fragment{}, err
@@ -114,6 +131,9 @@ func Create(repoRoot string, cfg config.Config, now time.Time, random io.Reader,
 		id, err := GenerateID(random)
 		if err != nil {
 			return Fragment{}, err
+		}
+		if nameStem != "" {
+			id = fmt.Sprintf("%s--%s--%s", item.CreatedAt.Format("20060102-150405"), nameStem, id)
 		}
 		item.ID = id
 		item.Path = filepath.Join(dir, id+".md")
@@ -194,6 +214,10 @@ func Load(path string) (Fragment, error) {
 		item.CreatedAt = info.ModTime().UTC().Truncate(time.Second)
 	}
 	item.Type = normalizeType(item.Type)
+	item.PublicAPI = normalizePublicAPI(item.PublicAPI)
+	item.Behavior = normalizeBehavior(item.Behavior)
+	item.Dependency = normalizeDependency(item.Dependency)
+	item.Runtime = normalizeRuntime(item.Runtime)
 	item.Body = strings.TrimSpace(item.Body)
 	if err := item.Validate(); err != nil {
 		return Fragment{}, fmt.Errorf("validate fragment %s: %w", path, err)
@@ -242,6 +266,18 @@ func (f Fragment) Validate() error {
 	if _, err := versioning.NormalizeBump(f.Bump); err != nil {
 		return err
 	}
+	if err := validateEnum("public_api", f.PublicAPI, "add", "change", "remove"); err != nil {
+		return err
+	}
+	if err := validateEnum("behavior", f.Behavior, "new", "fix", "redefine"); err != nil {
+		return err
+	}
+	if err := validateEnum("dependency", f.Dependency, "refresh", "relax", "restrict"); err != nil {
+		return err
+	}
+	if err := validateEnum("runtime", f.Runtime, "expand", "reduce"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -252,6 +288,10 @@ func (f Fragment) Format() string {
 	var metadata struct {
 		Type                 string   `toml:"type"`
 		Bump                 string   `toml:"bump"`
+		PublicAPI            string   `toml:"public_api,omitempty"`
+		Behavior             string   `toml:"behavior,omitempty"`
+		Dependency           string   `toml:"dependency,omitempty"`
+		Runtime              string   `toml:"runtime,omitempty"`
 		Breaking             bool     `toml:"breaking,omitempty"`
 		Scopes               []string `toml:"scopes,omitempty"`
 		Authors              []string `toml:"authors,omitempty"`
@@ -267,6 +307,10 @@ func (f Fragment) Format() string {
 	}
 	metadata.Type = normalizeType(f.Type)
 	metadata.Bump = strings.TrimSpace(f.Bump)
+	metadata.PublicAPI = normalizePublicAPI(f.PublicAPI)
+	metadata.Behavior = normalizeBehavior(f.Behavior)
+	metadata.Dependency = normalizeDependency(f.Dependency)
+	metadata.Runtime = normalizeRuntime(f.Runtime)
 	metadata.Breaking = f.Breaking
 	metadata.Scopes = slices.Clone(f.Scopes)
 	metadata.Authors = slices.Clone(f.Authors)
@@ -305,12 +349,66 @@ func GenerateID(random io.Reader) (string, error) {
 	), nil
 }
 
+func NormalizeNameStem(raw string) (string, error) {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value == "" {
+		return "", nil
+	}
+
+	var parts []string
+	for _, field := range strings.FieldsFunc(value, func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	}) {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		parts = append(parts, field)
+	}
+	if len(parts) == 0 {
+		return "", fmt.Errorf("fragment name stem must contain letters or digits")
+	}
+	return strings.Join(parts, "-"), nil
+}
+
 func normalizeType(raw string) string {
 	value := strings.TrimSpace(strings.ToLower(raw))
 	if value == "" {
 		return "changed"
 	}
 	return value
+}
+
+func normalizePublicAPI(raw string) string {
+	return normalizeOptionalValue(raw)
+}
+
+func normalizeBehavior(raw string) string {
+	return normalizeOptionalValue(raw)
+}
+
+func normalizeDependency(raw string) string {
+	return normalizeOptionalValue(raw)
+}
+
+func normalizeRuntime(raw string) string {
+	return normalizeOptionalValue(raw)
+}
+
+func normalizeOptionalValue(raw string) string {
+	return strings.TrimSpace(strings.ToLower(raw))
+}
+
+func validateEnum(field, value string, allowed ...string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	for _, item := range allowed {
+		if value == item {
+			return nil
+		}
+	}
+	return fmt.Errorf("fragment %s must be one of %s", field, strings.Join(allowed, ", "))
 }
 
 func (f Fragment) BodyPreview() string {

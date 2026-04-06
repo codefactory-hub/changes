@@ -50,13 +50,14 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 	app.Random = bytes.NewReader([]byte{0, 1, 2, 3})
 	if err := app.Run(context.Background(), []string{
-		"add",
+		"create",
+		"patch",
+		"--behavior", "fix",
 		"--type", "fixed",
-		"--bump", "patch",
 		"--scope", "release",
-		"--body", "Fix release note rendering.\n\nRender whole entries only.",
+		"Fix release note rendering.\n\nRender whole entries only.",
 	}); err != nil {
-		t.Fatalf("add returned error: %v\nstderr=%s", err, stderr.String())
+		t.Fatalf("create returned error: %v\nstderr=%s", err, stderr.String())
 	}
 
 	fragmentPath := strings.TrimSpace(stdout.String())
@@ -126,12 +127,13 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 	app.Random = bytes.NewReader([]byte{8, 9, 10, 11})
 	if err := app.Run(context.Background(), []string{
-		"add",
+		"create",
+		"minor",
+		"--public-api", "add",
 		"--type", "added",
-		"--bump", "minor",
-		"--body", "Add tester profile.\n\nIntroduce concise tester rendering.",
+		"Add tester profile.\n\nIntroduce concise tester rendering.",
 	}); err != nil {
-		t.Fatalf("second add returned error: %v\nstderr=%s", err, stderr.String())
+		t.Fatalf("second create returned error: %v\nstderr=%s", err, stderr.String())
 	}
 
 	stdout.Reset()
@@ -266,15 +268,16 @@ func TestAppResolveEmitsReleaseBundleJSON(t *testing.T) {
 		t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
 	}
 	if err := app.Run(context.Background(), []string{
-		"add",
+		"create",
+		"minor",
+		"--public-api", "add",
 		"--type", "added",
-		"--bump", "minor",
 		"--section-key", "highlights",
 		"--customer-visible",
 		"--release-notes-priority", "2",
-		"--body", "Introduce highlights section.\n\nExpose a faster path.",
+		"Introduce highlights section.\n\nExpose a faster path.",
 	}); err != nil {
-		t.Fatalf("add returned error: %v\nstderr=%s", err, stderr.String())
+		t.Fatalf("create returned error: %v\nstderr=%s", err, stderr.String())
 	}
 
 	stdout.Reset()
@@ -328,7 +331,7 @@ func TestAppHelpSurface(t *testing.T) {
 	if !strings.Contains(rootHelp, "Usage:") || !strings.Contains(rootHelp, "changes <command> [options]") {
 		t.Fatalf("root help missing usage:\n%s", rootHelp)
 	}
-	if !strings.Contains(rootHelp, "render profiles") || !strings.Contains(rootHelp, "changelog rebuild") {
+	if !strings.Contains(rootHelp, "create") || !strings.Contains(rootHelp, "render profiles") || !strings.Contains(rootHelp, "changelog rebuild") {
 		t.Fatalf("root help missing commands:\n%s", rootHelp)
 	}
 	if stderr.Len() != 0 {
@@ -358,6 +361,146 @@ func TestAppHelpSurface(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("render --help should not write stderr:\n%s", stderr.String())
+	}
+}
+
+func TestCreateRequiresExplicitBodyOutsideTTY(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 3, 9, 0, 0, 0, time.UTC)
+	}
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	err := app.Run(context.Background(), []string{"create", "minor"})
+	if err == nil {
+		t.Fatalf("create without body should fail outside TTY")
+	}
+	if !strings.Contains(stderr.String(), "body is required") {
+		t.Fatalf("unexpected stderr for missing body:\n%s", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err = app.Run(context.Background(), []string{"create", "minor", "--public-api", "oops", "body"})
+	if err == nil {
+		t.Fatalf("create with invalid public-api should fail")
+	}
+	if !strings.Contains(stderr.String(), "public_api must be one of") {
+		t.Fatalf("unexpected stderr for invalid public-api:\n%s", stderr.String())
+	}
+}
+
+func TestCreatePromptsForMissingFieldsInTTY(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 3, 10, 15, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{1, 2, 3})
+	app.IsTTY = func() bool { return true }
+	app.Stdin = strings.NewReader("did-something-cool\nThe whirly-gig no longer breaks on Thursdays.\n")
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"create", "minor"}); err != nil {
+		t.Fatalf("interactive create returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	fragmentPath := strings.TrimSpace(stdout.String())
+	assertExists(t, fragmentPath)
+	if !regexp.MustCompile(`20260403-101500--did-something-cool--[a-z]+-[a-z]+-[a-z]+\.md$`).MatchString(fragmentPath) {
+		t.Fatalf("fragment path %q did not include timestamp/name/suffix", fragmentPath)
+	}
+
+	raw, err := os.ReadFile(fragmentPath)
+	if err != nil {
+		t.Fatalf("read fragment: %v", err)
+	}
+	if !strings.Contains(string(raw), `type = "changed"`) || !strings.Contains(string(raw), "The whirly-gig no longer breaks on Thursdays.") {
+		t.Fatalf("interactive fragment missing prompted content:\n%s", raw)
+	}
+}
+
+func TestCreateEditUsesScaffoldedFrontMatter(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 3, 11, 0, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{4, 5, 6})
+	app.IsTTY = func() bool { return true }
+	app.Stdin = strings.NewReader("did-something-cool\n")
+	app.EditFile = func(path string) error {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !strings.Contains(string(raw), `bump = "minor"`) || !strings.Contains(string(raw), `# public_api = "add|change|remove"`) {
+			t.Fatalf("scaffold missing expected front matter:\n%s", raw)
+		}
+		edited := strings.TrimSpace(string(raw)) + "\n\nAdd the whirly-gig fix.\n\nIt now behaves on Thursdays.\n"
+		return os.WriteFile(path, []byte(edited), 0o644)
+	}
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"create", "minor", "--edit"}); err != nil {
+		t.Fatalf("create --edit returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	fragmentPath := strings.TrimSpace(stdout.String())
+	assertExists(t, fragmentPath)
+	raw, err := os.ReadFile(fragmentPath)
+	if err != nil {
+		t.Fatalf("read fragment: %v", err)
+	}
+	if !strings.Contains(string(raw), "Add the whirly-gig fix.") {
+		t.Fatalf("edited fragment missing body:\n%s", raw)
+	}
+}
+
+func TestAddCommandIsRejected(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	err := app.Run(context.Background(), []string{"add"})
+	if err == nil {
+		t.Fatalf("add should be rejected")
+	}
+	if !strings.Contains(stderr.String(), `unknown command "add"`) {
+		t.Fatalf("unexpected stderr:\n%s", stderr.String())
 	}
 }
 

@@ -9,7 +9,8 @@ Default fragment shape:
 ```md
 +++
 bump = "minor"
-type = "added"
+public_api = "add"
+behavior = "new"
 +++
 
 Any Markdown content goes here.
@@ -34,7 +35,8 @@ The tool always resolves the target repository root from Git. If a command runs 
 
 ```text
 changes init
-changes add --type fixed --bump patch --body ...
+changes create patch --behavior fix "Fix release note rendering."
+changes create minor --edit
 changes status
 changes version next [--pre rc]
 changes release [--pre rc] [--version ...]
@@ -43,6 +45,32 @@ changes render --version 1.2.0-rc.1 [--profile github_release] [--output path]
 changes render profiles
 changes changelog rebuild [--output path]
 ```
+
+Interactive authoring prompts for optional `name` stem and body text when you run `create` in a TTY. Use `--edit` when the body needs richer Markdown than a single prompt line.
+
+## Fragment vocabulary
+
+Fragments still carry an explicit `bump` because the current release suggestion layer consumes `patch|minor|major` directly. The newer semantic levers exist to explain why that bump was chosen and to make future automation more defensible.
+
+Use these fragment keys when they help:
+
+- `public_api = "add|change|remove"`
+- `behavior = "new|fix|redefine"`
+- `dependency = "refresh|relax|restrict"`
+- `runtime = "expand|reduce"`
+
+The intended meaning is:
+
+- `public_api`
+  Additive public surface change, breaking public surface change, or public surface removal.
+- `behavior`
+  New observable behavior, a bug fix that better matches the prior contract, or a semantic redefinition of existing usage.
+- `dependency`
+  Exact lockfile-style dependency refresh without changing declared version windows, broader declared compatibility, or narrower declared compatibility.
+- `runtime`
+  Broader or narrower declared support for runtimes, toolchains, SDKs, deployment targets, or supported execution environments.
+
+`type = "added|changed|fixed"` remains available as an optional render grouping for release-note sections. It is no longer the primary way the tool describes semver intent to developers.
 
 ## Model
 
@@ -65,6 +93,21 @@ changes changelog rebuild [--output path]
 - Unreleased fragments not reachable from the latest stable head determine the highest pending bump.
 - Stable suggestion uses `major > minor > patch` precedence.
 - Prerelease suggestion targets the next final version and increments the prerelease number within the same target version and label.
+
+The semantic levers above typically imply bumps like this:
+
+- `public_api = "remove"` or `public_api = "change"`: usually `major`
+- `public_api = "add"`: usually `minor`
+- `behavior = "redefine"`: usually `major`
+- `behavior = "new"`: usually `minor`
+- `behavior = "fix"` by itself: usually `patch`
+- `dependency = "restrict"`: usually `major`
+- `dependency = "relax"`: usually `minor`
+- `dependency = "refresh"` by itself: usually no published-package bump signal
+- `runtime = "reduce"`: usually `major`
+- `runtime = "expand"`: usually `minor`
+
+When a fragment carries multiple levers, the highest-severity implication should win. A `fix` combined with a `restrict`, for example, should still be treated as a likely `major`.
 
 ## Rendering
 

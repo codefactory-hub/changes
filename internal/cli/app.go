@@ -25,17 +25,25 @@ import (
 type App struct {
 	Stdout     io.Writer
 	Stderr     io.Writer
+	Stdin      io.Reader
 	Now        func() time.Time
 	Random     io.Reader
 	HTTPClient any
+	IsTTY      func() bool
+	EditFile   func(path string) error
+	promptIn   io.Reader
 }
 
 func NewApp(stdout, stderr io.Writer) *App {
-	return &App{
+	app := &App{
 		Stdout: stdout,
 		Stderr: stderr,
+		Stdin:  os.Stdin,
 		Now:    time.Now,
 	}
+	app.IsTTY = app.defaultIsTTY
+	app.EditFile = app.defaultEditFile
+	return app
 }
 
 func (a *App) Run(ctx context.Context, args []string) error {
@@ -62,8 +70,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "init":
 		err = a.runInit(ctx, args[1:])
-	case "add":
-		err = a.runAdd(ctx, args[1:])
+	case "create":
+		err = a.runCreate(ctx, args[1:])
 	case "status":
 		err = a.runStatus(ctx, args[1:])
 	case "version":
@@ -140,86 +148,6 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 	}
 
 	_, _ = fmt.Fprintf(a.Stdout, "initialized %s\n", repoRoot)
-	return nil
-}
-
-func (a *App) runAdd(ctx context.Context, args []string) error {
-	if wantsHelp(args) {
-		a.printHelp([]string{"add"})
-		return nil
-	}
-	fs := flag.NewFlagSet("add", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-
-	var kind string
-	var bump string
-	var body string
-	var breaking bool
-	var scopes stringSliceFlag
-	var sectionKey string
-	var area string
-	var platforms stringSliceFlag
-	var audiences stringSliceFlag
-	var customerVisible bool
-	var supportRelevance bool
-	var requiresAction bool
-	var releaseNotesPriority int
-	var displayOrder int
-
-	fs.StringVar(&kind, "type", "changed", "Fragment type")
-	fs.StringVar(&bump, "bump", "patch", "Version bump (patch|minor|major)")
-	fs.StringVar(&body, "body", "", "Fragment body")
-	fs.BoolVar(&breaking, "breaking", false, "Mark entry as breaking")
-	fs.Var(&scopes, "scope", "Fragment scope (repeatable)")
-	fs.StringVar(&sectionKey, "section-key", "", "Fragment section key")
-	fs.StringVar(&area, "area", "", "Fragment product area")
-	fs.Var(&platforms, "platform", "Fragment platform (repeatable)")
-	fs.Var(&audiences, "audience", "Fragment audience (repeatable)")
-	fs.BoolVar(&customerVisible, "customer-visible", false, "Mark entry as customer visible")
-	fs.BoolVar(&supportRelevance, "support-relevance", false, "Mark entry as support relevant")
-	fs.BoolVar(&requiresAction, "requires-action", false, "Mark entry as requiring operator action")
-	fs.IntVar(&releaseNotesPriority, "release-notes-priority", 0, "Release notes priority")
-	fs.IntVar(&displayOrder, "display-order", 0, "Display order within a section")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if strings.TrimSpace(body) == "" {
-		return fmt.Errorf("add: --body is required in the first layer; editor-based authoring is a documented follow-up")
-	}
-
-	repoRoot, cfg, err := a.loadConfig(ctx)
-	if err != nil {
-		return err
-	}
-
-	normalizedBump, err := versioning.NormalizeBump(bump)
-	if err != nil {
-		return err
-	}
-
-	item, err := fragments.Create(repoRoot, cfg, a.Now(), a.Random, fragments.NewInput{
-		Type:                 kind,
-		Bump:                 normalizedBump,
-		Breaking:             breaking,
-		Scopes:               scopes,
-		SectionKey:           sectionKey,
-		Area:                 area,
-		Platforms:            platforms,
-		Audiences:            audiences,
-		CustomerVisible:      customerVisible,
-		SupportRelevance:     supportRelevance,
-		RequiresAction:       requiresAction,
-		ReleaseNotesPriority: releaseNotesPriority,
-		DisplayOrder:         displayOrder,
-		Body:                 body,
-	})
-	if err != nil {
-		return err
-	}
-
-	_, _ = fmt.Fprintf(a.Stdout, "%s\n", item.Path)
 	return nil
 }
 
@@ -701,7 +629,7 @@ Usage:
 
 Commands:
   init
-  add
+  create
   status
   version next
   release
@@ -719,12 +647,20 @@ Usage:
 
 Initialize repo-local config, templates, changelog, and state directories.
 `)
-	case "add":
+	case "create":
 		body = strings.TrimSpace(`
 Usage:
-  changes add --type <kind> --bump <patch|minor|major> --body <text> [options]
+  changes create <patch|minor|major> [body] [--public-api <add|change|remove>] [--behavior <new|fix|redefine>] [--dependency <refresh|relax|restrict>] [--runtime <expand|reduce>] [--edit] [options]
 
 Options:
+  --body <text>                   Script-friendly body flag
+  --public-api <value>            Public API impact: add, change, or remove
+  --behavior <value>              Behavior impact: new, fix, or redefine
+  --dependency <value>            Dependency compatibility: refresh, relax, or restrict
+  --runtime <value>               Runtime support: expand or reduce
+  --type <value>                  Optional render grouping: added, changed, or fixed
+  --name <value>                  Optional filename stem hint
+  --edit                          Open the configured editor with a scaffolded fragment
   --scope <value>                 Repeatable fragment scope
   --section-key <value>           Section key for rendering
   --area <value>                  Product area hint

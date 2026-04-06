@@ -19,6 +19,22 @@ func TestGenerateID(t *testing.T) {
 	}
 }
 
+func TestNormalizeNameStem(t *testing.T) {
+	stem, err := NormalizeNameStem(" Did Something Cool! ")
+	if err != nil {
+		t.Fatalf("NormalizeNameStem returned error: %v", err)
+	}
+	if stem != "did-something-cool" {
+		t.Fatalf("NormalizeNameStem = %q, want %q", stem, "did-something-cool")
+	}
+}
+
+func TestNormalizeNameStemRejectsEmptySlug(t *testing.T) {
+	if _, err := NormalizeNameStem("!!!"); err == nil {
+		t.Fatalf("NormalizeNameStem should reject non-alphanumeric stems")
+	}
+}
+
 func TestFormatParseRoundTrip(t *testing.T) {
 	item := Fragment{
 		Metadata: Metadata{
@@ -26,6 +42,10 @@ func TestFormatParseRoundTrip(t *testing.T) {
 			CreatedAt:            time.Date(2026, 4, 2, 15, 30, 45, 0, time.UTC),
 			Type:                 "fixed",
 			Bump:                 "patch",
+			PublicAPI:            "change",
+			Behavior:             "fix",
+			Dependency:           "refresh",
+			Runtime:              "expand",
 			Scopes:               []string{"release"},
 			SectionKey:           "fixes",
 			Area:                 "rendering",
@@ -51,6 +71,9 @@ func TestFormatParseRoundTrip(t *testing.T) {
 	}
 	if parsed.SectionKey != item.SectionKey || parsed.Area != item.Area || parsed.DisplayOrder != item.DisplayOrder {
 		t.Fatalf("Parse(Format()) metadata mismatch: got %#v want %#v", parsed.Metadata, item.Metadata)
+	}
+	if parsed.PublicAPI != item.PublicAPI || parsed.Behavior != item.Behavior || parsed.Dependency != item.Dependency || parsed.Runtime != item.Runtime {
+		t.Fatalf("Parse(Format()) semantic metadata mismatch: got %#v want %#v", parsed.Metadata, item.Metadata)
 	}
 	if strings.Contains(raw, "title = ") || strings.Contains(raw, "id = ") || strings.Contains(raw, "created_at = ") {
 		t.Fatalf("formatted fragment should omit derived metadata: %s", raw)
