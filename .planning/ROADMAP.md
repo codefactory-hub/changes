@@ -6,7 +6,7 @@ This roadmap starts with explicit design work so layout semantics, precedence, m
 
 ## Phases
 
-- [ ] **Phase 1: Layout Proposal** - Define the command shapes, precedence rules, authoritative-selection model, and migration UX before any implementation
+- [x] **Phase 1: Layout Proposal** - Define the command shapes, precedence rules, authoritative-selection model, and migration UX before any implementation
 - [ ] **Phase 2: Resolution Core** - Build the path model that can resolve XDG-style and single-root layouts for both global and repo-local state
 - [ ] **Phase 3: Authority and Safety** - Add ambiguity detection, schema metadata, and fail-loud authority selection rules
 - [ ] **Phase 4: Command UX and Migration Help** - Surface inspection and migration workflows through clean CLI commands and documentation
@@ -26,7 +26,7 @@ This roadmap starts with explicit design work so layout semantics, precedence, m
 
 Plans:
 - [x] 01-01-PLAN.md — Lock the governing layout proposal, precedence rules, and command contracts
-- [ ] 01-02-PLAN.md — Validate proposal coverage, doctor UX, and the Phase 2 implementation gate
+- [x] 01-02-PLAN.md — Validate proposal coverage, doctor UX, and the Phase 2 implementation gate
 
 ### Phase 2: Resolution Core
 **Goal**: Implement the core path-resolution layer for XDG-style and single-root layouts without changing write safety guarantees
@@ -91,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Layout Proposal | 1/2 | In Progress | - |
+| 1. Layout Proposal | 2/2 | Complete | 2026-04-06 |
 | 2. Resolution Core | 0/2 | Not started | - |
 | 3. Authority and Safety | 0/2 | Not started | - |
 | 4. Command UX and Migration Help | 0/2 | Not started | - |
