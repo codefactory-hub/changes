@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
+status: ready_for_next_phase
 stopped_at: Completed 01-layout-proposal-02-PLAN.md
-last_updated: "2026-04-06T20:31:55.718Z"
-last_activity: 2026-04-06
+last_updated: "2026-04-06T20:38:05.134Z"
+last_activity: 2026-04-06 -- Phase 1 complete; Phase 2 ready to begin
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 2
   completed_plans: 2
-  percent: 100
+  percent: 20
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 01 — layout-proposal
+**Current focus:** Phase 2: Resolution Core ready to begin
 
 ## Current Position
 
-Phase: 01 (layout-proposal) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for Phase 2
-Last activity: 2026-04-06 -- Completed 01-02 and closed Phase 01
+Phase: 2 of 5 (Resolution Core)
+Plan: Not started
+Status: Phase 1 complete — ready for Phase 2
+Last activity: 2026-04-06 -- Phase 1 complete; Phase 2 ready to begin
 
-Progress: [██████████] 100%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
@@ -71,10 +71,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Phase 01 is complete and Phase 02 is the next execution target.
+- No current blockers; Phase 2 is the next active target.
 
 ## Session Continuity
 
-Last session: 2026-04-06T20:31:55.718Z
-Stopped at: Completed 01-layout-proposal-02-PLAN.md
-Resume file: None
+Last session: 2026-04-06T20:38:05.134Z
+Stopped at: Phase 1 completion recorded
+Resume file: .planning/ROADMAP.md
