@@ -17,6 +17,7 @@ Use repository-relative XDG-like paths as the primary layout:
 - `.config/changes/config.toml`
 - `.local/share/changes/fragments/`
 - `.local/share/changes/releases/`
+- `.local/share/changes/prompts/`
 - `.local/share/changes/templates/`
 - `.local/state/`
 

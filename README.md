@@ -41,6 +41,7 @@ Committed:
 - `.config/changes/config.toml`
 - `.local/share/changes/fragments/`
 - `.local/share/changes/releases/`
+- `.local/share/changes/prompts/`
 - `.local/share/changes/templates/`
 
 Transient:
@@ -179,13 +180,14 @@ That policy drives the tool's recommendation. `changes status --explain` and int
 ## Rendering
 
 - `render` is the public output command.
-- Render behavior is configured through named template packs in `.config/changes/config.toml`.
-- The built-in packs are `repository_markdown`, `github_release`, `tester_summary`, `debian_changelog`, and `rpm_changelog`.
+- Render behavior is configured through named render profiles in `.config/changes/config.toml`.
+- Each render profile resolves to a concrete template pack at render time.
+- The built-in render profiles are `repository_markdown`, `github_release`, `tester_summary`, `debian_changelog`, and `rpm_changelog`.
 - `changes render --latest --profile repository_markdown` is the public path for rebuilding `CHANGELOG.md`.
-- Single-release packs render only the selected `ReleaseBundle`.
-- Chain-style packs walk `parent_version` backward from the chosen base release record and render each assembled bundle in the lineage.
+- Single-release profiles render only the selected `ReleaseBundle`.
+- Chain-style profiles walk `parent_version` backward from the chosen base release record and render each assembled bundle in the lineage.
 - Multi-release trimming drops whole release blocks from the tail of the rendered chain. It never truncates inside an entry body.
-- Repo-local template files override the built-in pack templates without changing release-record semantics.
+- Repo-local template files override the built-in profile templates without changing release-record semantics.
 
 ## Further Reading
 

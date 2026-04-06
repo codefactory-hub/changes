@@ -30,7 +30,7 @@ jobs:
           set -euo pipefail
           mkdir -p .dist
           if [ -f .config/changes/config.toml ]; then
-            go run ./cmd/changes changelog rebuild --output .dist/release-notes.md
+            go run ./cmd/changes render --latest --profile repository_markdown --output .dist/release-notes.md
           else
             printf '# %s\n\nRelease notes placeholder. Commit repo-local `changes` config and templates before enabling generated release notes.\n' "${GITHUB_REF_NAME}" > .dist/release-notes.md
           fi

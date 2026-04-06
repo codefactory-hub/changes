@@ -36,7 +36,7 @@ The workflow currently tries to run:
 go run ./cmd/changes render --latest --profile repository_markdown --output .dist/release-notes.md
 ```
 
-If the CLI is not present yet, the workflow writes a placeholder file so release automation stays coherent during bootstrap.
+If the repo has not been initialized for `changes` yet, the workflow writes a placeholder file so release automation stays coherent during bootstrap.
 
 ## Tap model
 
