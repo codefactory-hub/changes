@@ -11,6 +11,17 @@ changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH
 
 These command lines are the only approved Phase 1 contract for layout initialization, inspection, and migration guidance. Future implementation work must use these exact command names and flag shapes.
 
+## Locked Rule Summary
+
+- Supported styles: xdg and home only.
+- Scopes resolved independently: global and repo.
+- Global bootstrap precedence: flags > CHANGES_HOME > XDG env vars > built-in default locations.
+- Repo init precedence: flags > [repo.init] defaults > CHANGES_HOME signal > XDG env signal > built-in default locations.
+- Doctor tiers: default concise, --explain rich, --json structured.
+- Migration prompt is an advisory Markdown brief with required verification and explicit no-dual-write instructions.
+- Global config bootstrap keys are limited to [repo.init].
+- Repo state ignore rules are /.local/state/ and /.changes/state/.
+
 ## Initialization Rules
 
 - `changes init is repo-local only`
@@ -61,6 +72,7 @@ Validation rules:
 - `--json` is structured inspection output
 - `changes doctor --migration-prompt ...` generates an LLM-oriented structured brief
 - `doctor` owns ambiguity inspection, legacy-only inspection, and migration guidance
+- Legacy-only detection is doctor-visible but invalid for ordinary commands.
 
 Ordinary commands must not inspect or normalize legacy-only states on their own. When only legacy-detected layouts exist, operators are directed to `changes doctor`.
 
@@ -78,6 +90,7 @@ Repo-local initialization and migration must keep the active repo-local state di
 
 - `xdg` repositories use `/.local/state/`
 - `home` repositories use `/.changes/state/`
+- Repo state ignore rules are `/.local/state/` and `/.changes/state/`.
 
 These ignore rules apply to the authoritative repo-local layout only.
 

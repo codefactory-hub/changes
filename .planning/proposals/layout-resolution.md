@@ -17,6 +17,21 @@ Define the authoritative design for flexible storage layout resolution in `chang
 - Writes target exactly one authoritative layout; no dual-write behavior is allowed
 - `CHANGES_HOME` can influence bootstrap and default selection, but it never silently beats a conflicting valid on-disk candidate
 
+## Locked Phase 2 Rules
+
+- Supported styles: xdg and home only.
+- Scopes resolved independently: global and repo.
+- Global bootstrap precedence: flags > CHANGES_HOME > XDG env vars > built-in default locations.
+- Repo init precedence: flags > [repo.init] defaults > CHANGES_HOME signal > XDG env signal > built-in default locations.
+- Operational validity requires parseable layout.toml with matching scope and style.
+- Legacy-only detection is doctor-visible but invalid for ordinary commands.
+- Multiple supported candidates = ambiguity error.
+- Repair or manifest stamping is explicit only.
+- Doctor tiers: default concise, --explain rich, --json structured.
+- Migration prompt is an advisory Markdown brief with required verification and explicit no-dual-write instructions.
+- Global config bootstrap keys are limited to [repo.init].
+- Repo state ignore rules are /.local/state/ and /.changes/state/.
+
 ## Supported Layouts
 
 ### Global `xdg`
@@ -203,7 +218,7 @@ state = "$REPO_ROOT/.local/state/changes"
 - `$HOME`
 - `$layout.root`
 
-No version stamps, migration timestamps, or last-written markers are part of schema v1.
+No version stamps, migration timestamps, or last-written markers are part of the initial schema.
 
 Operational validity requires that `layout.toml` parse and that its `scope` and `style` match the candidate being evaluated. Legacy-detected layouts without a manifest remain diagnosable, but they are not valid for ordinary operation.
 

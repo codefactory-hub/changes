@@ -11,6 +11,11 @@ The approved per-scope candidate states are:
 
 Operationally valid means `layout.toml` parses and the manifest `scope` and `style` match the candidate being evaluated. Legacy-detected candidates remain diagnosable, but only `changes doctor` may inspect them for ordinary operator workflows.
 
+- Scopes resolved independently: global and repo.
+- Operational validity requires parseable layout.toml with matching scope and style.
+- Legacy-only detection is doctor-visible but invalid for ordinary commands.
+- Multiple supported candidates = ambiguity error.
+
 ## Default Output
 
 Default `changes doctor` output stays concise. It reports only the minimum operator-facing facts needed to understand the current state:
@@ -21,6 +26,8 @@ Default `changes doctor` output stays concise. It reports only the minimum opera
 - whether the operator must resolve ambiguity or initialize a layout
 
 Default output does not dump full candidate inventories or precedence traces unless the operator asks for a richer tier.
+
+Doctor tiers: default concise, --explain rich, --json structured.
 
 ## Explain Output
 
@@ -134,3 +141,5 @@ Preserve exactly one authoritative destination.
 Do not dual-write or keep two live authoritative layouts.
 
 Do not convert this brief into destructive automation without explicit operator review.
+
+Migration prompt is an advisory Markdown brief with required verification and explicit no-dual-write instructions.
