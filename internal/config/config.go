@@ -57,7 +57,7 @@ type RenderProfile struct {
 }
 
 type VersioningConfig struct {
-	PrereleaseLabel string `toml:"prerelease_label"`
+	PublicAPI string `toml:"public_api"`
 }
 
 func Default() Config {
@@ -125,7 +125,7 @@ func Default() Config {
 			},
 		},
 		Versioning: VersioningConfig{
-			PrereleaseLabel: "rc",
+			PublicAPI: "unstable",
 		},
 	}
 }
@@ -235,6 +235,10 @@ func (c *Config) applyDefaults() {
 		}
 		c.RenderProfiles[name] = current
 	}
+
+	if strings.TrimSpace(c.Versioning.PublicAPI) == "" {
+		c.Versioning.PublicAPI = defaults.Versioning.PublicAPI
+	}
 }
 
 func (c Config) Validate() error {
@@ -257,6 +261,12 @@ func (c Config) Validate() error {
 		if profile.MaxChars < 0 {
 			return fmt.Errorf("config: render profile %s max_chars must be >= 0", name)
 		}
+	}
+
+	switch strings.TrimSpace(c.Versioning.PublicAPI) {
+	case "stable", "unstable":
+	default:
+		return fmt.Errorf("config: versioning.public_api must be one of stable, unstable")
 	}
 
 	return nil

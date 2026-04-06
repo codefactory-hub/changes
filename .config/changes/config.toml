@@ -60,4 +60,4 @@
     maintainer_email = "changes@example.invalid"
 
 [versioning]
-  prerelease_label = "rc"
+  public_api = "unstable"

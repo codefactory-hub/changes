@@ -18,6 +18,7 @@ import (
 	"github.com/example/changes/internal/releases"
 	"github.com/example/changes/internal/render"
 	"github.com/example/changes/internal/reporoot"
+	"github.com/example/changes/internal/semverpolicy"
 	"github.com/example/changes/internal/templates"
 	"github.com/example/changes/internal/versioning"
 )
@@ -74,8 +75,6 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		err = a.runCreate(ctx, args[1:])
 	case "status":
 		err = a.runStatus(ctx, args[1:])
-	case "version":
-		err = a.runVersion(ctx, args[1:])
 	case "release":
 		err = a.runRelease(ctx, args[1:])
 	case "render":
@@ -158,11 +157,13 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	}
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	var explain bool
+	fs.BoolVar(&explain, "explain", false, "Show policy evidence for the pending bump")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("usage: changes status")
+		return fmt.Errorf("usage: changes status [--explain]")
 	}
 
 	repoRoot, cfg, err := a.loadConfig(ctx)
@@ -185,10 +186,17 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	policy, err := recommendationPolicy(cfg, unreleased)
+	if err != nil {
+		return err
+	}
 
 	_, _ = fmt.Fprintf(a.Stdout, "Unreleased fragments: %d\n", len(unreleased))
-	_, _ = fmt.Fprintf(a.Stdout, "Highest pending bump: %s\n", highest)
+	_, _ = fmt.Fprintf(a.Stdout, "Highest declared bump: %s\n", highest)
 	_, _ = fmt.Fprintf(a.Stdout, "Recommended next stable: %s\n", nextStable.String())
+	if explain {
+		renderRecommendationExplanation(a.Stdout, policy)
+	}
 
 	prereleaseHeads := releases.PrereleaseHeads(records, product)
 	if len(prereleaseHeads) > 0 {
@@ -208,25 +216,35 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	return nil
 }
 
-func (a *App) runVersion(ctx context.Context, args []string) error {
-	if len(args) == 1 && isHelpArg(args[0]) {
-		a.printHelp([]string{"version"})
+func (a *App) runRelease(ctx context.Context, args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"release"})
 		return nil
 	}
-	if len(args) >= 2 && args[0] == "next" && wantsHelp(args[1:]) {
-		a.printHelp([]string{"version", "next"})
-		return nil
-	}
-	if len(args) == 0 || args[0] != "next" {
-		return fmt.Errorf("usage: changes version next [--pre label]")
-	}
-
-	fs := flag.NewFlagSet("version next", flag.ContinueOnError)
+	fs := flag.NewFlagSet("release", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+
+	var version string
 	var pre string
+	var bump string
+	var yes bool
+
+	fs.StringVar(&version, "version", "", "Release version")
 	fs.StringVar(&pre, "pre", "", "Prerelease label")
-	if err := fs.Parse(args[1:]); err != nil {
+	fs.StringVar(&bump, "bump", "", "Override the recommended bump")
+	fs.BoolVar(&yes, "yes", false, "Accept the current recommendation without prompting")
+
+	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("usage: changes release [--version v] [--pre label] [--bump patch|minor|major] [--yes]")
+	}
+	if strings.TrimSpace(version) != "" && strings.TrimSpace(pre) != "" {
+		return fmt.Errorf("release: --version cannot be combined with --pre")
+	}
+	if strings.TrimSpace(version) != "" && strings.TrimSpace(bump) != "" {
+		return fmt.Errorf("release: --version cannot be combined with --bump")
 	}
 
 	repoRoot, cfg, err := a.loadConfig(ctx)
@@ -244,56 +262,22 @@ func (a *App) runVersion(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	nextStable, err := recommendedStableVersion(cfg, records, product, unreleased)
+	policy, err := recommendationPolicy(cfg, unreleased)
 	if err != nil {
 		return err
 	}
-
-	if strings.TrimSpace(pre) == "" {
-		_, _ = fmt.Fprintln(a.Stdout, nextStable.String())
-		return nil
-	}
-
-	nextPrerelease := recommendedPreviewVersion(cfg, records, product, nextStable, pre)
-	_, _ = fmt.Fprintln(a.Stdout, nextPrerelease.String())
-	return nil
-}
-
-func (a *App) runRelease(ctx context.Context, args []string) error {
-	if wantsHelp(args) {
-		a.printHelp([]string{"release"})
-		return nil
-	}
-	fs := flag.NewFlagSet("release", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-
-	var version string
-	var pre string
-
-	fs.StringVar(&version, "version", "", "Release version")
-	fs.StringVar(&pre, "pre", "", "Prerelease label")
-
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("usage: changes release [--version v] [--pre label]")
-	}
-
-	repoRoot, cfg, err := a.loadConfig(ctx)
+	releaseVersion, releaseBump, err := selectReleaseVersion(cfg, records, product, allFragments, version, pre, bump)
 	if err != nil {
 		return err
 	}
-
-	allFragments, records, err := a.loadState(repoRoot, cfg)
-	if err != nil {
-		return err
+	if !a.isTTY() && !yes && strings.TrimSpace(version) == "" && strings.TrimSpace(bump) == "" {
+		return fmt.Errorf("release: non-interactive use requires --yes, --bump, or --version")
 	}
-
-	product := cfg.Project.Name
-	releaseVersion, err := selectReleaseVersion(cfg, records, product, allFragments, version, pre)
-	if err != nil {
-		return err
+	if a.isTTY() && !yes && strings.TrimSpace(version) == "" {
+		releaseVersion, releaseBump, err = a.confirmReleaseSelection(releaseVersion, releaseBump, pre, unreleased, policy, cfg, records, product)
+		if err != nil {
+			return err
+		}
 	}
 
 	selected, err := selectReleaseFragments(allFragments, records, product, releaseVersion)
@@ -631,7 +615,6 @@ Commands:
   init
   create
   status
-  version next
   release
   resolve
   render
@@ -676,32 +659,16 @@ Options:
 	case "status":
 		body = strings.TrimSpace(`
 Usage:
-  changes status
+  changes status [--explain]
 
 Show unreleased fragment counts, the highest pending bump, the recommended next stable version, and active prerelease heads.
-`)
-	case "version":
-		body = strings.TrimSpace(`
-Usage:
-  changes version next [--pre <label>]
-
-Print the next recommended final or prerelease version.
-`)
-	case "version next":
-		body = strings.TrimSpace(`
-Usage:
-  changes version next [--pre <label>]
-
-Examples:
-  changes version next
-  changes version next --pre rc
 `)
 	case "release":
 		body = strings.TrimSpace(`
 Usage:
-  changes release [--version <version>] [--pre <label>]
+  changes release [--version <version>] [--pre <label>] [--bump <patch|minor|major>] [--yes]
 
-Create a base release record for the selected release.
+Create a base release record for the selected release. In a TTY, the command shows the release evidence and lets you accept or override the default recommendation unless you pass --yes.
 `)
 	case "resolve":
 		body = strings.TrimSpace(`
@@ -752,51 +719,56 @@ Use "changes help" to see the available commands.
 }
 
 func recommendedStableVersion(cfg config.Config, records []releases.ReleaseRecord, product string, pending []fragments.Fragment) (versioning.Version, error) {
-	initial, err := versioning.Parse(cfg.Project.InitialVersion)
+	policy, err := recommendationPolicy(cfg, pending)
 	if err != nil {
-		return versioning.Version{}, fmt.Errorf("parse initial version: %w", err)
+		return versioning.Version{}, err
 	}
-
-	var latestStable *versioning.Version
-	if record := releases.LatestFinalHeadForProduct(records, product); record != nil {
-		value := versioning.MustParse(record.Version)
-		latestStable = &value
-	}
-
-	return versioning.NextStable(latestStable, initial, highestPendingBump(pending)), nil
+	return nextStableForBump(cfg, records, product, policy.SuggestedBump)
 }
 
-func recommendedPreviewVersion(cfg config.Config, records []releases.ReleaseRecord, product string, target versioning.Version, label string) versioning.Version {
-	if strings.TrimSpace(label) == "" {
-		label = cfg.Versioning.PrereleaseLabel
-	}
+func recommendationPolicy(cfg config.Config, pending []fragments.Fragment) (semverpolicy.Recommendation, error) {
+	return semverpolicy.Evaluate(publicAPIStability(cfg.Versioning.PublicAPI), pending), nil
+}
+
+func recommendedPreviewVersion(records []releases.ReleaseRecord, product string, target versioning.Version, label string) versioning.Version {
 	current := releases.PrereleaseVersionsForLine(records, product, target.String(), label)
 	return versioning.NextPrerelease(target, label, current)
 }
 
-func selectReleaseVersion(cfg config.Config, records []releases.ReleaseRecord, product string, allFragments []fragments.Fragment, requestedVersion, requestedPre string) (versioning.Version, error) {
+func selectReleaseVersion(cfg config.Config, records []releases.ReleaseRecord, product string, allFragments []fragments.Fragment, requestedVersion, requestedPre, requestedBump string) (versioning.Version, versioning.Bump, error) {
 	if strings.TrimSpace(requestedVersion) != "" {
 		version, err := versioning.Parse(requestedVersion)
 		if err != nil {
-			return versioning.Version{}, err
+			return versioning.Version{}, versioning.BumpNone, err
 		}
-		return version, nil
+		return version, versioning.BumpNone, nil
 	}
 
 	pending, err := releases.UnreleasedFinalFragments(allFragments, records, product)
 	if err != nil {
-		return versioning.Version{}, err
+		return versioning.Version{}, versioning.BumpNone, err
 	}
-	target, err := recommendedStableVersion(cfg, records, product, pending)
+	policy, err := recommendationPolicy(cfg, pending)
 	if err != nil {
-		return versioning.Version{}, err
+		return versioning.Version{}, versioning.BumpNone, err
+	}
+	chosenBump := policy.SuggestedBump
+	if strings.TrimSpace(requestedBump) != "" {
+		chosenBump, err = versioning.NormalizeBump(requestedBump)
+		if err != nil {
+			return versioning.Version{}, versioning.BumpNone, err
+		}
+	}
+	target, err := nextStableForBump(cfg, records, product, chosenBump)
+	if err != nil {
+		return versioning.Version{}, versioning.BumpNone, err
 	}
 
 	if strings.TrimSpace(requestedPre) == "" {
-		return target, nil
+		return target, chosenBump, nil
 	}
 
-	return recommendedPreviewVersion(cfg, records, product, target, requestedPre), nil
+	return recommendedPreviewVersion(records, product, target, requestedPre), chosenBump, nil
 }
 
 func selectReleaseFragments(allFragments []fragments.Fragment, records []releases.ReleaseRecord, product string, version versioning.Version) ([]fragments.Fragment, error) {
@@ -888,6 +860,108 @@ func highestPendingBump(items []fragments.Fragment) versioning.Bump {
 		best = versioning.HighestBump(best, bump)
 	}
 	return best
+}
+
+func renderRecommendationExplanation(w io.Writer, recommendation semverpolicy.Recommendation) {
+	_, _ = fmt.Fprintln(w, "Policy evidence:")
+	_, _ = fmt.Fprintf(w, "- Public API policy: %s\n", recommendation.Stability)
+	_, _ = fmt.Fprintf(w, "- Declared bump: %s\n", recommendation.DeclaredBump)
+	_, _ = fmt.Fprintf(w, "- Policy-suggested bump: %s\n", recommendation.SuggestedBump)
+	if len(recommendation.Assessments) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "Fragment evidence:")
+	for _, item := range recommendation.Assessments {
+		_, _ = fmt.Fprintf(w, "- %s declared=%s policy=%s\n", item.FragmentID, item.DeclaredBump, item.SuggestedBump)
+		for _, reason := range item.Reasons {
+			_, _ = fmt.Fprintf(w, "  %s\n", reason)
+		}
+	}
+}
+
+func latestStableVersion(records []releases.ReleaseRecord, product string) *versioning.Version {
+	if record := releases.LatestFinalHeadForProduct(records, product); record != nil {
+		value := versioning.MustParse(record.Version)
+		return &value
+	}
+	return nil
+}
+
+func nextStableForBump(cfg config.Config, records []releases.ReleaseRecord, product string, bump versioning.Bump) (versioning.Version, error) {
+	initial, err := versioning.Parse(cfg.Project.InitialVersion)
+	if err != nil {
+		return versioning.Version{}, fmt.Errorf("parse initial version: %w", err)
+	}
+	return versioning.NextStable(latestStableVersion(records, product), initial, bump), nil
+}
+
+func publicAPIStability(raw string) semverpolicy.Stability {
+	if strings.TrimSpace(raw) == "stable" {
+		return semverpolicy.StabilityStable
+	}
+	return semverpolicy.StabilityUnstable
+}
+
+func (a *App) confirmReleaseSelection(releaseVersion versioning.Version, releaseBump versioning.Bump, pre string, pending []fragments.Fragment, policy semverpolicy.Recommendation, cfg config.Config, records []releases.ReleaseRecord, product string) (versioning.Version, versioning.Bump, error) {
+	a.promptIn = nil
+	renderReleaseDecisionSummary(a.Stdout, pending, policy, releaseVersion)
+
+	if strings.TrimSpace(pre) != "" {
+		answer, err := a.promptOptionalLine("Press Enter to accept, choose patch/minor/major for a different target, or type cancel: ")
+		if err != nil {
+			return versioning.Version{}, versioning.BumpNone, err
+		}
+		switch strings.TrimSpace(strings.ToLower(answer)) {
+		case "":
+			return releaseVersion, releaseBump, nil
+		case "cancel":
+			return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release canceled")
+		case string(versioning.BumpPatch), string(versioning.BumpMinor), string(versioning.BumpMajor):
+			override, err := versioning.NormalizeBump(answer)
+			if err != nil {
+				return versioning.Version{}, versioning.BumpNone, err
+			}
+			target, err := nextStableForBump(cfg, records, product, override)
+			if err != nil {
+				return versioning.Version{}, versioning.BumpNone, err
+			}
+			return recommendedPreviewVersion(records, product, target, pre), override, nil
+		default:
+			return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release: choose patch, minor, major, or cancel")
+		}
+	}
+
+	answer, err := a.promptOptionalLine("Press Enter to accept, choose patch/minor/major, or type cancel: ")
+	if err != nil {
+		return versioning.Version{}, versioning.BumpNone, err
+	}
+	switch strings.TrimSpace(strings.ToLower(answer)) {
+	case "":
+		return releaseVersion, releaseBump, nil
+	case "cancel":
+		return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release canceled")
+	case string(versioning.BumpPatch), string(versioning.BumpMinor), string(versioning.BumpMajor):
+		override, err := versioning.NormalizeBump(answer)
+		if err != nil {
+			return versioning.Version{}, versioning.BumpNone, err
+		}
+		target, err := nextStableForBump(cfg, records, product, override)
+		if err != nil {
+			return versioning.Version{}, versioning.BumpNone, err
+		}
+		return target, override, nil
+	default:
+		return versioning.Version{}, versioning.BumpNone, fmt.Errorf("release: choose patch, minor, major, or cancel")
+	}
+}
+
+func renderReleaseDecisionSummary(w io.Writer, pending []fragments.Fragment, recommendation semverpolicy.Recommendation, releaseVersion versioning.Version) {
+	_, _ = fmt.Fprintf(w, "Pending fragments: %d\n", len(pending))
+	for _, item := range pending {
+		_, _ = fmt.Fprintf(w, "- %s [%s/%s] %s\n", item.ID, item.Type, item.Bump, item.BodyPreview())
+	}
+	renderRecommendationExplanation(w, recommendation)
+	_, _ = fmt.Fprintf(w, "Default release: %s\n", releaseVersion.String())
 }
 
 func ensureGitignore(repoRoot string) error {

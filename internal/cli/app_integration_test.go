@@ -76,14 +76,6 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if err := app.Run(context.Background(), []string{"version", "next", "--pre", "rc"}); err != nil {
-		t.Fatalf("version next returned error: %v", err)
-	}
-	if got := strings.TrimSpace(stdout.String()); got != "0.1.0-rc.1" {
-		t.Fatalf("version next --pre rc = %q, want 0.1.0-rc.1", got)
-	}
-
-	stdout.Reset()
 	if err := app.Run(context.Background(), []string{"render", "profiles"}); err != nil {
 		t.Fatalf("render profiles returned error: %v", err)
 	}
@@ -109,7 +101,7 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 16, 0, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "--pre", "rc"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--pre", "rc", "--yes"}); err != nil {
 		t.Fatalf("release --pre rc returned error: %v", err)
 	}
 	rc1Path := strings.TrimSpace(stdout.String())
@@ -140,7 +132,7 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 17, 0, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "--pre", "rc"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--pre", "rc", "--yes"}); err != nil {
 		t.Fatalf("second release --pre rc returned error: %v", err)
 	}
 	rc2Path := strings.TrimSpace(stdout.String())
@@ -170,7 +162,7 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 17, 30, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release", "--pre", "beta"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--pre", "beta", "--yes"}); err != nil {
 		t.Fatalf("release --pre beta returned error: %v", err)
 	}
 	beta1Path := strings.TrimSpace(stdout.String())
@@ -205,7 +197,7 @@ func TestAppEndToEnd(t *testing.T) {
 	app.Now = func() time.Time {
 		return time.Date(2026, 4, 2, 18, 0, 0, 0, time.UTC)
 	}
-	if err := app.Run(context.Background(), []string{"release"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--yes"}); err != nil {
 		t.Fatalf("release returned error: %v", err)
 	}
 	stablePath := strings.TrimSpace(stdout.String())
@@ -281,7 +273,7 @@ func TestAppResolveEmitsReleaseBundleJSON(t *testing.T) {
 	}
 
 	stdout.Reset()
-	if err := app.Run(context.Background(), []string{"release"}); err != nil {
+	if err := app.Run(context.Background(), []string{"release", "--yes"}); err != nil {
 		t.Fatalf("release returned error: %v", err)
 	}
 
@@ -334,6 +326,9 @@ func TestAppHelpSurface(t *testing.T) {
 	if !strings.Contains(rootHelp, "create") || !strings.Contains(rootHelp, "render profiles") || !strings.Contains(rootHelp, "changelog rebuild") {
 		t.Fatalf("root help missing commands:\n%s", rootHelp)
 	}
+	if strings.Contains(rootHelp, "version next") {
+		t.Fatalf("root help should not mention version next:\n%s", rootHelp)
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("root --help should not write stderr:\n%s", stderr.String())
 	}
@@ -361,6 +356,188 @@ func TestAppHelpSurface(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("render --help should not write stderr:\n%s", stderr.String())
+	}
+}
+
+func TestStatusExplainShowsPolicyEvidence(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 9, 0, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{7, 8, 9})
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"minor",
+		"--public-api", "change",
+		"Shift the parser API to a new shape.",
+	}); err != nil {
+		t.Fatalf("create returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"status", "--explain"}); err != nil {
+		t.Fatalf("status --explain returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	body := stdout.String()
+	if !strings.Contains(body, "Policy evidence:") {
+		t.Fatalf("missing policy explanation:\n%s", body)
+	}
+	if !strings.Contains(body, "Public API policy: unstable") {
+		t.Fatalf("missing configured public API policy:\n%s", body)
+	}
+	if !strings.Contains(body, "Policy-suggested bump: minor") {
+		t.Fatalf("missing suggested bump:\n%s", body)
+	}
+	if !strings.Contains(body, "public_api=change implies minor while public API policy is unstable") {
+		t.Fatalf("missing fragment reason:\n%s", body)
+	}
+}
+
+func TestReleaseRequiresDecisionOutsideTTY(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 10, 0, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{9, 8, 7})
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"patch",
+		"--behavior", "fix",
+		"Fix the parser edge case.",
+	}); err != nil {
+		t.Fatalf("create returned error: %v", err)
+	}
+
+	err := app.Run(context.Background(), []string{"release"})
+	if err == nil {
+		t.Fatalf("release should require an explicit decision outside TTY")
+	}
+	if !strings.Contains(stderr.String(), "non-interactive use requires --yes, --bump, or --version") {
+		t.Fatalf("unexpected stderr:\n%s", stderr.String())
+	}
+}
+
+func TestReleasePromptsInTTYAndAllowsOverride(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 11, 0, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{1, 3, 5, 7, 9, 11})
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"patch",
+		"--behavior", "fix",
+		"Fix the first parser bug.",
+	}); err != nil {
+		t.Fatalf("create returned error: %v", err)
+	}
+	if err := app.Run(context.Background(), []string{"release", "--yes"}); err != nil {
+		t.Fatalf("initial release returned error: %v", err)
+	}
+
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"patch",
+		"--behavior", "fix",
+		"Fix the second parser bug.",
+	}); err != nil {
+		t.Fatalf("second create returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	app.IsTTY = func() bool { return true }
+	app.Stdin = strings.NewReader("minor\n")
+	if err := app.Run(context.Background(), []string{"release"}); err != nil {
+		t.Fatalf("interactive release returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	body := stdout.String()
+	if !strings.Contains(body, "Policy evidence:") || !strings.Contains(body, "Default release: 0.1.1") {
+		t.Fatalf("interactive release missing evidence:\n%s", body)
+	}
+	lines := strings.Split(strings.TrimSpace(body), "\n")
+	releasePath := lines[len(lines)-1]
+	record, err := releases.Load(releasePath)
+	if err != nil {
+		t.Fatalf("load release record: %v", err)
+	}
+	if record.Version != "0.2.0" {
+		t.Fatalf("interactive override version = %q, want 0.2.0", record.Version)
+	}
+}
+
+func TestReleasePromptCanCancel(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 5, 13, 0, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{2, 4, 6})
+	app.IsTTY = func() bool { return true }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+	if err := app.Run(context.Background(), []string{
+		"create",
+		"patch",
+		"--behavior", "fix",
+		"Fix the cancel test bug.",
+	}); err != nil {
+		t.Fatalf("create returned error: %v", err)
+	}
+
+	app.Stdin = strings.NewReader("cancel\n")
+	err := app.Run(context.Background(), []string{"release"})
+	if err == nil || !strings.Contains(err.Error(), "release canceled") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

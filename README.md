@@ -38,8 +38,12 @@ changes init
 changes create patch --behavior fix "Fix release note rendering."
 changes create minor --edit
 changes status
-changes version next [--pre rc]
-changes release [--pre rc] [--version ...]
+changes status --explain
+changes release
+changes release --pre rc
+changes release --version 1.2.0
+changes release --bump minor
+changes release --yes
 changes resolve --product cli --version 1.2.0 [--format json] [--output path]
 changes render --version 1.2.0-rc.1 [--profile github_release] [--output path]
 changes render profiles
@@ -72,6 +76,8 @@ The intended meaning is:
 
 `type = "added|changed|fixed"` remains available as an optional render grouping for release-note sections. It is no longer the primary way the tool describes semver intent to developers.
 
+Today the declared `bump` remains visible as evidence, but the tool also evaluates the semantic levers through an advisory policy layer. Inspect that evidence with `changes status --explain`. In a TTY, `changes release` shows the same evidence, proposes a default release version, and lets a human accept it with Enter or override it with `patch`, `minor`, or `major`.
+
 ## Model
 
 - Fragments are durable source records. They are not deleted when a release happens.
@@ -87,12 +93,19 @@ The intended meaning is:
 - A final release recomputes from the previous final head, not from prerelease history.
 - Build metadata groups companion records for the same release identity and never affects precedence.
 
-## Semver behavior in the first layer
+## Versioning policy
 
 - If no stable release exists, `project.initial_version` is the first stable baseline.
-- Unreleased fragments not reachable from the latest stable head determine the highest pending bump.
-- Stable suggestion uses `major > minor > patch` precedence.
+- Unreleased fragments not reachable from the latest stable head determine the highest declared bump.
 - Prerelease suggestion targets the next final version and increments the prerelease number within the same target version and label.
+- Prerelease labels are explicit per release command, such as `changes release --pre beta`; there is no configured default label.
+
+Configure the public API policy in `.config/changes/config.toml`:
+
+```toml
+[versioning]
+public_api = "unstable"
+```
 
 The semantic levers above typically imply bumps like this:
 
@@ -108,6 +121,15 @@ The semantic levers above typically imply bumps like this:
 - `runtime = "expand"`: usually `minor`
 
 When a fragment carries multiple levers, the highest-severity implication should win. A `fix` combined with a `restrict`, for example, should still be treated as a likely `major`.
+
+The current policy layer distinguishes between stable and unstable public APIs through `versioning.public_api`:
+
+- `public_api = "stable"` keeps the usual SemVer interpretation, so breaking-looking levers such as `public_api = "change"`, `dependency = "restrict"`, or `runtime = "reduce"` suggest `major`
+- `public_api = "unstable"` softens those same breaking-looking levers to `minor`
+- additive levers such as `public_api = "add"`, `behavior = "new"`, `dependency = "relax"`, and `runtime = "expand"` still suggest `minor`
+- `behavior = "fix"` still suggests `patch`
+
+That policy is advisory for now. `changes status --explain` and interactive `changes release` show both the highest declared bump and the policy-suggested bump. `changes release --yes` accepts the default recommendation, while `changes release --bump <patch|minor|major>` or `changes release --version <exact>` lets the operator choose explicitly.
 
 ## Rendering
 
