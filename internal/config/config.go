@@ -91,27 +91,32 @@ func Default() Config {
 }
 
 func RepoConfigPath(repoRoot string) string {
-	return filepath.Join(repoRoot, repoConfigPath)
+	return filepath.Join(repoCompatibilityPaths(repoRoot).Config, "config.toml")
 }
 
 func UserConfigPath(home string) string {
-	return filepath.Join(home, userConfigPath)
+	for _, candidate := range resolveGlobalCandidates(home) {
+		if candidate.Style == StyleXDG {
+			return filepath.Join(candidate.Paths.Config, "config.toml")
+		}
+	}
+	return filepath.Join(globalPaths(StyleXDG, ResolveOptions{HomeDir: home}).Config, "config.toml")
 }
 
 func FragmentsDir(repoRoot string, cfg Config) string {
-	return filepath.Join(repoRoot, cfg.Paths.DataDir, "fragments")
+	return filepath.Join(repoDataDir(repoRoot, cfg), "fragments")
 }
 
 func ReleasesDir(repoRoot string, cfg Config) string {
-	return filepath.Join(repoRoot, cfg.Paths.DataDir, "releases")
+	return filepath.Join(repoDataDir(repoRoot, cfg), "releases")
 }
 
 func TemplatesDir(repoRoot string, cfg Config) string {
-	return filepath.Join(repoRoot, cfg.Paths.TemplatesDir)
+	return repoTemplatesDir(repoRoot, cfg)
 }
 
 func PromptsDir(repoRoot string, cfg Config) string {
-	return filepath.Join(repoRoot, cfg.Paths.DataDir, "prompts")
+	return filepath.Join(repoDataDir(repoRoot, cfg), "prompts")
 }
 
 func HistoryImportPromptPath(repoRoot string, cfg Config) string {
@@ -119,6 +124,9 @@ func HistoryImportPromptPath(repoRoot string, cfg Config) string {
 }
 
 func StateDir(repoRoot string, cfg Config) string {
+	if usesDefaultRepoPath(cfg.Paths.StateDir, Default().Paths.StateDir) {
+		return repoCompatibilityPaths(repoRoot).State
+	}
 	return filepath.Join(repoRoot, cfg.Paths.StateDir)
 }
 
@@ -127,7 +135,16 @@ func ChangelogPath(repoRoot string, cfg Config) string {
 }
 
 func Load(repoRoot string) (Config, error) {
-	path := RepoConfigPath(repoRoot)
+	resolution, err := ResolveRepo(ResolveOptions{RepoRoot: repoRoot})
+	if err != nil {
+		return Config{}, fmt.Errorf("load config: resolve repo layout: %w", err)
+	}
+
+	path, err := repoConfigPathForLoad(repoRoot, resolution)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Default()
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -150,6 +167,61 @@ func Load(repoRoot string) (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func repoCompatibilityPaths(repoRoot string) LayoutPaths {
+	opts := ResolveOptions{RepoRoot: repoRoot}
+	resolution, err := ResolveRepo(opts)
+	if err == nil && resolution.Authoritative != nil {
+		return resolution.Authoritative.Paths
+	}
+	return repoPaths(StyleXDG, opts)
+}
+
+func repoConfigPathForLoad(repoRoot string, resolution ScopeResolution) (string, error) {
+	switch resolution.Status {
+	case StatusResolved:
+		if resolution.Authoritative == nil {
+			return "", fmt.Errorf("load config: repo layout status %s", resolution.Status)
+		}
+		return filepath.Join(resolution.Authoritative.Paths.Config, "config.toml"), nil
+	case StatusUninitialized:
+		return "", fmt.Errorf("load config: %s does not exist; run `changes init` first", filepath.Join(repoPaths(StyleXDG, ResolveOptions{RepoRoot: repoRoot}).Config, "config.toml"))
+	case StatusLegacyOnly, StatusAmbiguous, StatusInvalid:
+		return "", fmt.Errorf("load config: repo layout status %s", resolution.Status)
+	default:
+		return "", fmt.Errorf("load config: repo layout status %s", resolution.Status)
+	}
+}
+
+func repoDataDir(repoRoot string, cfg Config) string {
+	if usesDefaultRepoPath(cfg.Paths.DataDir, Default().Paths.DataDir) {
+		return repoCompatibilityPaths(repoRoot).Data
+	}
+	return filepath.Join(repoRoot, cfg.Paths.DataDir)
+}
+
+func repoTemplatesDir(repoRoot string, cfg Config) string {
+	if usesDefaultRepoPath(cfg.Paths.TemplatesDir, Default().Paths.TemplatesDir) {
+		return filepath.Join(repoCompatibilityPaths(repoRoot).Data, "templates")
+	}
+	return filepath.Join(repoRoot, cfg.Paths.TemplatesDir)
+}
+
+func usesDefaultRepoPath(value, defaultValue string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return true
+	}
+	return filepath.Clean(trimmed) == filepath.Clean(defaultValue)
+}
+
+func resolveGlobalCandidates(home string) []Candidate {
+	resolution, err := ResolveGlobal(ResolveOptions{HomeDir: home})
+	if err != nil {
+		return nil
+	}
+	return resolution.Candidates
 }
 
 func (c *Config) applyDefaults() {
