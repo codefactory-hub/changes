@@ -15,6 +15,7 @@ Define the authoritative design for flexible storage layout resolution in `chang
 - Each scope resolves to exactly one authoritative layout for ordinary operation
 - Reads and writes must always go through the resolved authoritative layout object
 - Writes target exactly one authoritative layout; no dual-write behavior is allowed
+- `CHANGES_HOME` can influence bootstrap and default selection, but it never silently beats a conflicting valid on-disk candidate
 
 ## Supported Layouts
 
@@ -55,6 +56,39 @@ For each scope (`global`, `repo`):
 
 The ambiguity rule applies even if one candidate is derived from `CHANGES_HOME` and another is discoverable through XDG paths. Environment signals influence preference and bootstrapping, but they do not silently override a conflicting real on-disk situation.
 
+## Candidate Validity and Authority
+
+### Operationally valid candidates
+
+A candidate is operationally valid only when all of the following are true:
+
+1. The candidate matches one of the supported layout shapes for its scope
+2. `layout.toml` exists in the candidate config directory
+3. `layout.toml` parses successfully
+4. The manifest `scope` matches the candidate scope
+5. The manifest `style` matches the candidate style
+
+Ordinary commands may operate only on operationally valid candidates.
+
+### Legacy-detected candidates
+
+Legacy layouts without a manifest are detectable, but they are not operationally valid.
+
+A legacy candidate is diagnosable only when it:
+
+1. Matches a supported layout shape for the requested scope and style
+2. Contains an authoritative `changes` artifact inside that shape
+
+For legacy diagnosis, `config.toml` is sufficient as an authoritative `changes` artifact.
+
+### Authority outcomes
+
+- Exactly one operationally valid candidate for a scope is `authoritative`
+- Multiple operationally valid candidates for a scope are always an ambiguity error
+- A scope with only legacy-detected candidates is not operationally valid for ordinary commands
+- `changes doctor` is the only command that may inspect legacy-detected-only situations
+- Manifest stamping or repair is always explicit; ordinary commands must not opportunistically stamp or repair manifests
+
 ## Bootstrap and Default Precedence
 
 ### Global bootstrap when no global layout exists
@@ -86,6 +120,7 @@ If multiple supported layouts exist for the same scope:
 - The error must explain that the user must pick one authoritative location
 - The error may suggest which candidate appears strongest based on diagnostic heuristics
 - The error may suggest generating a migration prompt to merge into one authoritative destination
+- `CHANGES_HOME` never silently wins over a conflicting valid candidate already present on disk
 
 ## Recommended Candidate Heuristics
 
@@ -116,6 +151,20 @@ Layout metadata must be:
 
 ### Manifest shape
 
+Global `home` example:
+
+```toml
+schema_version = 1
+scope = "global"
+style = "home"
+
+[layout]
+root = "$CHANGES_HOME"
+config = "$layout.root/config"
+data = "$layout.root/data"
+state = "$layout.root/state"
+```
+
 Repo `home` example:
 
 ```toml
@@ -138,6 +187,7 @@ scope = "repo"
 style = "xdg"
 
 [layout]
+root = "$REPO_ROOT"
 config = "$REPO_ROOT/.config/changes"
 data = "$REPO_ROOT/.local/share/changes"
 state = "$REPO_ROOT/.local/state/changes"
@@ -154,6 +204,8 @@ state = "$REPO_ROOT/.local/state/changes"
 - `$layout.root`
 
 No version stamps, migration timestamps, or last-written markers are part of schema v1.
+
+Operational validity requires that `layout.toml` parse and that its `scope` and `style` match the candidate being evaluated. Legacy-detected layouts without a manifest remain diagnosable, but they are not valid for ordinary operation.
 
 ## Repo `.gitignore` Rule
 
@@ -189,6 +241,7 @@ style = "xdg"
 - `home` is valid only when `style = "home"`
 - If `style = "home"` and `home` is omitted, default to `.changes`
 - If `style = "xdg"` and `home` is present, that is a configuration error
+- No bootstrap-affecting keys outside `[repo.init]` are allowed
 
 ## Approved Command Surface
 
@@ -202,21 +255,25 @@ changes init global [--layout xdg|home] [--home PATH]
 Rules:
 
 - `--home` is only valid with `--layout home`
-- `changes init` controls repo-local initialization
-- `changes init global` controls global initialization
+- `changes init` is repo-local only
+- `changes init global` is global only
 
 ### Diagnosis and migration assistance
 
 ```text
-changes doctor [--scope global|repo|all] [--json]
+changes doctor [--scope global|repo|all] [--explain] [--json]
 changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH] [--output PATH]
 ```
 
 Rules:
 
 - `doctor` owns inspection, ambiguity diagnostics, and migration guidance
+- Default `doctor` output stays concise
+- Richer candidate analysis belongs behind `--explain`
+- `--json` is structured inspection output
 - Migration prompt generation belongs to `doctor`, not a separate `layout` namespace
 - `doctor` must be able to explain why a scope resolved, failed, or is ambiguous
+- Ordinary commands fail when they find only `legacy-detected` layouts; only `doctor` may inspect those states
 
 ## Migration Prompt Requirements
 
@@ -229,6 +286,9 @@ Rules:
 - ambiguity/conflict notes if multiple candidates exist
 - instructions to preserve one authoritative destination only
 - an explicit prohibition on dual-write outcomes
+- a required verification section
+
+The generated migration help is an LLM-oriented structured brief. It must describe the selected source and destination layouts without becoming an executable shell plan.
 
 The migration prompt is advisory. It does not perform migration by itself.
 
