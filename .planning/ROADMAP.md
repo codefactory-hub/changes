@@ -25,8 +25,8 @@ This roadmap starts with explicit design work so layout semantics, precedence, m
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Draft the layout-resolution and precedence proposal
-- [ ] 01-02: Review proposal tradeoffs and refine command UX before implementation
+- [ ] 01-01-PLAN.md — Lock the governing layout proposal, precedence rules, and command contracts
+- [ ] 01-02-PLAN.md — Validate proposal coverage, doctor UX, and the Phase 2 implementation gate
 
 ### Phase 2: Resolution Core
 **Goal**: Implement the core path-resolution layer for XDG-style and single-root layouts without changing write safety guarantees
