@@ -338,17 +338,17 @@ func ResolveRepo(ctx ResolveContext) (ScopeResolution, error) {
 | A2 | Keep compatibility wrappers exported in `internal/config` throughout Phase 2 instead of cutting all consumers over to typed resolver results immediately. [ASSUMED] | Architecture Patterns | Phase 2 scope could expand into unnecessary churn if the transition strategy changes. |
 | A3 | A small status enum such as `uninitialized`, `resolved`, `legacy_only`, `ambiguous`, and `invalid` is sufficient for Phase 2 and can evolve in Phase 3. [ASSUMED] | Architecture Patterns | Later `doctor` or ambiguity flows may need a richer status matrix than initially planned. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should Phase 2 add a dedicated global-config load API now, or only global path resolution?**
 What we know: `GLBL-01` and `GLBL-02` require global path resolution, and the proposal limits bootstrap-affecting global config to `[repo.init]`. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: .planning/proposals/layout-resolution.md]
-What's unclear: No current command consumes a real global config file yet, so the minimum Phase 2 surface is not forced by current callers. [VERIFIED: internal/cli/app.go; VERIFIED: internal/app/app.go]
-Recommendation: Plan for global path resolution and manifest parsing now, but keep global config loading as a narrow helper unless a Phase 2 plan explicitly needs more than `[repo.init]`. [ASSUMED]
+What was unclear: No current command consumes a real global config file yet, so the minimum Phase 2 surface is not forced by current callers. [VERIFIED: internal/cli/app.go; VERIFIED: internal/app/app.go]
+Resolution: Phase 2 will implement full global path resolution and manifest parsing, but global config loading remains narrow and limited to the `[repo.init]` defaults needed by repo initialization. A broader global-config API is deferred until a later phase needs more than repo-init defaults. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: .planning/proposals/layout-resolution.md; ASSUMED]
 
 2. **Where should deterministic repo-init default selection live?**
 What we know: `REPO-03` is a Phase 2 requirement and the proposal defines a precedence table for repo initialization when no layout exists. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: .planning/proposals/layout-resolution.md]
-What's unclear: The repo currently puts init orchestration in `internal/app/init.go`, while the phase context wants the shared engine to live in `internal/config`. [VERIFIED: internal/app/init.go; VERIFIED: .planning/phases/02-resolution-core/02-CONTEXT.md]
-Recommendation: Put the precedence decision function in `internal/config` so it can be reused later by `init`, `init global`, and `doctor` without duplicating policy. [ASSUMED]
+What was unclear: The repo currently puts init orchestration in `internal/app/init.go`, while the phase context wants the shared engine to live in `internal/config`. [VERIFIED: internal/app/init.go; VERIFIED: .planning/phases/02-resolution-core/02-CONTEXT.md]
+Resolution: The precedence decision function belongs in `internal/config` as shared policy, and the Phase 2 plan must also wire the current `internal/app/init.go` bootstrap flow to consume that helper so `REPO-03` is delivered through the real init path rather than deferred to a later UX-only phase. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: .planning/phases/02-resolution-core/02-CONTEXT.md; ASSUMED]
 
 ## Environment Availability
 
