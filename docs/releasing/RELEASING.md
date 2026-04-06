@@ -9,6 +9,19 @@ This repository is set up to publish tagged releases through GoReleaser and then
 3. GoReleaser builds the `changes` binary for Linux, macOS, and Windows.
 4. GoReleaser publishes a GitHub Release and updates the internal Homebrew cask tap.
 
+## Local verification
+
+Use these commands before pushing a release tag:
+
+```bash
+./scripts/prepare-release-notes.sh
+./scripts/verify-release-config.sh
+./scripts/build-release-snapshot.sh
+```
+
+`./scripts/verify-release-config.sh` requires GoReleaser `v2.10` or newer because this repo uses `homebrew_casks` in `.goreleaser.yaml`.
+`./scripts/build-release-snapshot.sh` supplies repo-local Go cache paths and placeholder release env values so a local snapshot build can run without production release credentials.
+
 ## Required repository variables
 
 Set these as GitHub repository variables unless your hosting provider uses a different secret model:
@@ -30,13 +43,13 @@ Set these as GitHub repository variables unless your hosting provider uses a dif
 
 ## Notes generation
 
-The workflow currently tries to run:
+The workflow currently runs:
 
 ```bash
-go run ./cmd/changes render --latest --profile repository_markdown --output .dist/release-notes.md
+./scripts/prepare-release-notes.sh "${GITHUB_REF_NAME}"
 ```
 
-If the repo has not been initialized for `changes` yet, the workflow writes a placeholder file so release automation stays coherent during bootstrap.
+If the repo has not been initialized for `changes` yet, or if it still has no final release record to render, the script writes a placeholder file so release automation stays coherent during bootstrap.
 
 ## Tap model
 
