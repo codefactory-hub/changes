@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: stable
           cache: true
@@ -54,14 +54,14 @@ jobs:
           CHANGES_RELEASE_BOT_EMAIL: ${{ vars.CHANGES_RELEASE_BOT_EMAIL }}
 
       - name: Upload release notes artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-notes-dry-run
           path: .dist/release-notes.md
           if-no-files-found: error
 
       - name: Upload GoReleaser snapshot artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: goreleaser-snapshot
           path: dist/**
