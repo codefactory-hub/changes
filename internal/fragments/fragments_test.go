@@ -118,3 +118,85 @@ func TestCreateDoesNotOverwriteExistingFragmentOnCollision(t *testing.T) {
 		t.Fatalf("existing fragment was overwritten: got %q want %q", string(raw), original)
 	}
 }
+
+func TestLoadDerivesIDAndTimestampAndNormalizesFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sample-fragment.md")
+	modTime := time.Date(2026, 4, 6, 15, 4, 5, 0, time.UTC)
+	raw := []byte("+++\n" +
+		"type = \" FIXED \"\n" +
+		"public_api = \" ADD \"\n" +
+		"behavior = \" FIX \"\n" +
+		"dependency = \" REFRESH \"\n" +
+		"runtime = \" EXPAND \"\n" +
+		"+++\n\n" +
+		"  First line.\n\nMore detail.\n")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("write fragment: %v", err)
+	}
+	if err := os.Chtimes(path, modTime, modTime); err != nil {
+		t.Fatalf("chtimes fragment: %v", err)
+	}
+
+	item, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if item.ID != "sample-fragment" {
+		t.Fatalf("ID = %q, want sample-fragment", item.ID)
+	}
+	if !item.CreatedAt.Equal(modTime) {
+		t.Fatalf("CreatedAt = %s, want %s", item.CreatedAt, modTime)
+	}
+	if item.Type != "fixed" || item.PublicAPI != "add" || item.Behavior != "fix" ||
+		item.Dependency != "refresh" || item.Runtime != "expand" {
+		t.Fatalf("normalized fields = %#v", item.Metadata)
+	}
+	if item.Body != "First line.\n\nMore detail." {
+		t.Fatalf("Body = %q", item.Body)
+	}
+}
+
+func TestListReturnsSortedMarkdownFragmentsOnly(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := config.Default()
+	dir := config.FragmentsDir(repoRoot, cfg)
+	if err := os.MkdirAll(filepath.Join(dir, "nested"), 0o755); err != nil {
+		t.Fatalf("mkdir fragments dir: %v", err)
+	}
+
+	first := []byte("+++\ncreated_at = 2026-04-06T12:00:00Z\n+++\n\nFirst body.\n")
+	second := []byte("+++\ncreated_at = 2026-04-06T11:00:00Z\n+++\n\nSecond body.\n")
+	if err := os.WriteFile(filepath.Join(dir, "b.md"), first, 0o644); err != nil {
+		t.Fatalf("write first fragment: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.md"), second, 0o644); err != nil {
+		t.Fatalf("write second fragment: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("skip"), 0o644); err != nil {
+		t.Fatalf("write non-markdown file: %v", err)
+	}
+
+	items, err := List(repoRoot, cfg)
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	got := make([]string, 0, len(items))
+	for _, item := range items {
+		got = append(got, item.ID)
+	}
+	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("List IDs = %#v, want a,b", got)
+	}
+}
+
+func TestBodyPreviewUsesFirstNonEmptyLine(t *testing.T) {
+	item := Fragment{Body: "\n  First   line   here. \n\nSecond line.\n"}
+	if got := item.BodyPreview(); got != "First line here." {
+		t.Fatalf("BodyPreview = %q, want %q", got, "First line here.")
+	}
+
+	if got := (Fragment{}).BodyPreview(); got != "" {
+		t.Fatalf("empty BodyPreview = %q, want empty", got)
+	}
+}

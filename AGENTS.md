@@ -2,25 +2,25 @@
 
 ## Go toolchain paths for agents
 
-When running Go commands inside this repository from Codex or other sandboxed agents, keep Go's writable cache and workspace data inside the repository so the toolchain does not try to write into user-level directories outside the sandbox.
-
-Use this repo-local XDG-style layout:
-
-- `GOCACHE=$PWD/.cache/go-build`
-- `GOPATH=$PWD/.local/share/go`
-- `GOMODCACHE=$PWD/.local/share/go/pkg/mod`
-- `GOBIN=$PWD/.local/share/go/bin`
-
-Apply those variables to commands that may write Go cache or module data, including `go test`, `go build`, `go run`, and `go install`.
-
-Example:
+Prefer plain Go commands first in this repository:
 
 ```bash
-env GOCACHE=$PWD/.cache/go-build \
-  GOPATH=$PWD/.local/share/go \
-  GOMODCACHE=$PWD/.local/share/go/pkg/mod \
-  GOBIN=$PWD/.local/share/go/bin \
-  go test ./...
+go test ./...
 ```
 
-These paths are agent/tooling-only. They are separate from the committed `.local/share/changes/**` source-of-truth data used by the `changes` CLI itself.
+Only add writable-path overrides when the environment actually requires them, such as a sandbox or permission error involving Go's cache or module workspace.
+
+When overrides are needed, keep them minimal:
+
+- Start with `GOCACHE` only.
+- Use `/tmp` or a repo-local cache directory for writable cache data.
+- Add `GOMODCACHE`, `GOPATH`, or `GOBIN` only if the specific command fails without them.
+- Do not redirect Go paths preemptively when the plain command already works.
+
+Example fallback:
+
+```bash
+env GOCACHE=/tmp/changes-go-build go test ./...
+```
+
+If a stricter sandbox still requires repo-local writable paths, use a repo-local fallback intentionally rather than by default.

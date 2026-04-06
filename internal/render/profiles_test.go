@@ -129,3 +129,55 @@ func TestResolveProfilesRejectsInvalidEffectiveProfiles(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestResolveProfileAndAvailablePacksCloneMetadata(t *testing.T) {
+	cfg := config.Default()
+
+	profile, err := resolveProfile(cfg, config.RenderProfileDebianChangelog)
+	if err != nil {
+		t.Fatalf("resolveProfile returned error: %v", err)
+	}
+	profile.Metadata["distribution"] = "mutated"
+
+	again, err := resolveProfile(cfg, config.RenderProfileDebianChangelog)
+	if err != nil {
+		t.Fatalf("resolveProfile second call returned error: %v", err)
+	}
+	if again.Metadata["distribution"] != "unstable" {
+		t.Fatalf("resolveProfile should clone built-in metadata, got %#v", again.Metadata)
+	}
+
+	packs, err := AvailablePacks(cfg)
+	if err != nil {
+		t.Fatalf("AvailablePacks returned error: %v", err)
+	}
+	for _, pack := range packs {
+		if pack.Name == config.RenderProfileDebianChangelog {
+			pack.Metadata["distribution"] = "mutated"
+		}
+	}
+	resolved, err := resolveProfile(cfg, config.RenderProfileDebianChangelog)
+	if err != nil {
+		t.Fatalf("resolveProfile after packs returned error: %v", err)
+	}
+	if resolved.Metadata["distribution"] != "unstable" {
+		t.Fatalf("AvailablePacks should clone metadata, got %#v", resolved.Metadata)
+	}
+}
+
+func TestResolveProfilesRejectsMissingTemplatesAndUnknownProfiles(t *testing.T) {
+	cfg := config.Default()
+	cfg.RenderProfiles = map[string]config.RenderProfile{
+		"broken": {
+			Mode:          config.RenderModeSingleRelease,
+			EntryTemplate: "release-entry.md.tmpl",
+		},
+	}
+	if _, err := ResolveProfiles(cfg); err == nil || !strings.Contains(err.Error(), "missing release_template") {
+		t.Fatalf("unexpected ResolveProfiles error: %v", err)
+	}
+
+	if _, err := resolveProfile(config.Default(), "missing"); err == nil || !strings.Contains(err.Error(), "is not configured") {
+		t.Fatalf("unexpected resolveProfile error: %v", err)
+	}
+}

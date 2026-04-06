@@ -174,6 +174,51 @@ func TestRepoLocalTemplateOverridesBuiltInPack(t *testing.T) {
 	}
 }
 
+func TestRendererHelpersAndValidationPaths(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := config.Default()
+	ensureBuiltinTemplates(t, repoRoot, cfg)
+
+	renderer, err := New(repoRoot, cfg, config.RenderProfileGitHubRelease)
+	if err != nil {
+		t.Fatalf("New returned error: %v", err)
+	}
+	if renderer.Pack().Name != config.RenderProfileGitHubRelease {
+		t.Fatalf("Pack().Name = %q", renderer.Pack().Name)
+	}
+
+	if _, err := renderer.Render(Document{}); err == nil || !strings.Contains(err.Error(), "expects a single release bundle") {
+		t.Fatalf("unexpected Render error: %v", err)
+	}
+
+	if got := assembleDocument(TemplatePack{DocumentHeader: "# Header", OmissionNotice: "Trimmed"}, []string{" one \n", "two\n"}, 1); got != "# Header\n\none\n\ntwo\n\nTrimmed\n" {
+		t.Fatalf("assembleDocument = %q", got)
+	}
+	if got := indent(" one \n two ", 2); got != "  one\n  two" {
+		t.Fatalf("indent = %q", got)
+	}
+	if got := singleLine(" one \n two "); got != "one two" {
+		t.Fatalf("singleLine = %q", got)
+	}
+	if got := (TemplatePack{Metadata: map[string]string{"channel": "stable"}}).metadataValue("channel", "fallback"); got != "stable" {
+		t.Fatalf("metadataValue = %q", got)
+	}
+	if got := (TemplatePack{}).metadataValue("channel", "fallback"); got != "fallback" {
+		t.Fatalf("metadataValue fallback = %q", got)
+	}
+}
+
+func TestRenderLoadTemplateFallbackAndErrors(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := config.Default()
+	if got, err := loadTemplate(repoRoot, cfg, "release-entry.md.tmpl"); err != nil || !strings.Contains(got, "{{") {
+		t.Fatalf("loadTemplate built-in fallback = (%q, %v)", got, err)
+	}
+	if _, err := loadTemplate(repoRoot, cfg, "missing.tmpl"); err == nil || !strings.Contains(err.Error(), "is not available") {
+		t.Fatalf("unexpected missing template error: %v", err)
+	}
+}
+
 func ensureBuiltinTemplates(t *testing.T, repoRoot string, cfg config.Config) {
 	t.Helper()
 

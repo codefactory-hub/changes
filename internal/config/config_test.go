@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestLoadAcceptsStableAndUnstablePublicAPI(t *testing.T) {
@@ -60,5 +62,128 @@ func TestLoadRejectsLegacyPrereleaseLabel(t *testing.T) {
 	_, err := Load(repoRoot)
 	if err == nil || !strings.Contains(err.Error(), "unsupported keys: versioning.prerelease_label") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPathHelpersResolveConfiguredLocations(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := Default()
+	cfg.Project.ChangelogFile = "docs/CHANGELOG.md"
+	cfg.Paths.DataDir = ".data/changes"
+	cfg.Paths.StateDir = ".state/changes"
+	cfg.Paths.TemplatesDir = ".templates/changes"
+
+	if got := RepoConfigPath(repoRoot); got != filepath.Join(repoRoot, ".config/changes/config.toml") {
+		t.Fatalf("RepoConfigPath = %q", got)
+	}
+	if got := UserConfigPath("/home/tester"); got != filepath.Join("/home/tester", ".config/changes/config.toml") {
+		t.Fatalf("UserConfigPath = %q", got)
+	}
+	if got := FragmentsDir(repoRoot, cfg); got != filepath.Join(repoRoot, ".data/changes/fragments") {
+		t.Fatalf("FragmentsDir = %q", got)
+	}
+	if got := ReleasesDir(repoRoot, cfg); got != filepath.Join(repoRoot, ".data/changes/releases") {
+		t.Fatalf("ReleasesDir = %q", got)
+	}
+	if got := TemplatesDir(repoRoot, cfg); got != filepath.Join(repoRoot, ".templates/changes") {
+		t.Fatalf("TemplatesDir = %q", got)
+	}
+	if got := PromptsDir(repoRoot, cfg); got != filepath.Join(repoRoot, ".data/changes/prompts") {
+		t.Fatalf("PromptsDir = %q", got)
+	}
+	if got := HistoryImportPromptPath(repoRoot, cfg); got != filepath.Join(repoRoot, ".data/changes/prompts/release-history-import-llm-prompt.md") {
+		t.Fatalf("HistoryImportPromptPath = %q", got)
+	}
+	if got := StateDir(repoRoot, cfg); got != filepath.Join(repoRoot, ".state/changes") {
+		t.Fatalf("StateDir = %q", got)
+	}
+	if got := ChangelogPath(repoRoot, cfg); got != filepath.Join(repoRoot, "docs/CHANGELOG.md") {
+		t.Fatalf("ChangelogPath = %q", got)
+	}
+}
+
+func TestLoadAppliesDefaultVersioningWhenMissing(t *testing.T) {
+	repoRoot := t.TempDir()
+	path := RepoConfigPath(repoRoot)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+
+	raw := []byte("[project]\nname = \"changes\"\nchangelog_file = \"CHANGELOG.md\"\ninitial_version = \"0.1.0\"\n")
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	loaded, err := Load(repoRoot)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if loaded.Versioning.PublicAPI != "unstable" {
+		t.Fatalf("public_api = %q, want unstable", loaded.Versioning.PublicAPI)
+	}
+}
+
+func TestRenderProfileUnmarshalTracksPresenceForEmptyValues(t *testing.T) {
+	var profile RenderProfile
+	if err := profile.UnmarshalTOML(map[string]any{
+		"description":      "",
+		"mode":             "",
+		"document_header":  "",
+		"release_template": "",
+		"entry_template":   "",
+		"max_chars":        int64(0),
+		"omission_notice":  "",
+		"metadata":         map[string]any{},
+	}); err != nil {
+		t.Fatalf("UnmarshalTOML returned error: %v", err)
+	}
+
+	if !profile.HasDescription() || !profile.HasMode() || !profile.HasDocumentHeader() ||
+		!profile.HasReleaseTemplate() || !profile.HasEntryTemplate() ||
+		!profile.HasMaxChars() || !profile.HasOmissionNotice() || !profile.HasMetadata() {
+		t.Fatalf("presence helpers should report explicit empty values as present: %#v", profile)
+	}
+}
+
+func TestRenderProfileUnmarshalRejectsUnsupportedOrWrongTypes(t *testing.T) {
+	var profile RenderProfile
+	if err := profile.UnmarshalTOML(map[string]any{"unknown": "value"}); err == nil {
+		t.Fatalf("UnmarshalTOML unsupported key returned nil error")
+	}
+	if err := profile.UnmarshalTOML(map[string]any{"max_chars": "nope"}); err == nil {
+		t.Fatalf("UnmarshalTOML invalid max_chars returned nil error")
+	}
+	if err := profile.UnmarshalTOML(map[string]any{"metadata": map[string]any{"channel": 5}}); err == nil {
+		t.Fatalf("UnmarshalTOML invalid metadata returned nil error")
+	}
+}
+
+func TestWriteCreatesParentDirectoriesAndRoundTripsTOML(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "nested", "config.toml")
+	cfg := Default()
+	cfg.Project.Name = "changes"
+	cfg.RenderProfiles = map[string]RenderProfile{
+		"custom": {
+			Description: "Custom profile",
+			Mode:        RenderModeSingleRelease,
+			MaxChars:    120,
+			Metadata:    map[string]string{"channel": "notes"},
+		},
+	}
+
+	if err := Write(path, cfg); err != nil {
+		t.Fatalf("Write returned error: %v", err)
+	}
+
+	var decoded Config
+	if _, err := toml.DecodeFile(path, &decoded); err != nil {
+		t.Fatalf("DecodeFile returned error: %v", err)
+	}
+	if decoded.Project.Name != "changes" {
+		t.Fatalf("decoded project name = %q, want changes", decoded.Project.Name)
+	}
+	if decoded.RenderProfiles["custom"].Metadata["channel"] != "notes" {
+		t.Fatalf("decoded metadata = %#v", decoded.RenderProfiles["custom"].Metadata)
 	}
 }

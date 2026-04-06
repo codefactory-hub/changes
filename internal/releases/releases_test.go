@@ -202,6 +202,112 @@ func TestLoadAcceptsFlatReleaseDirectoryLayout(t *testing.T) {
 	}
 }
 
+func TestReleaseSelectionHelpersAndAccessors(t *testing.T) {
+	records := []ReleaseRecord{
+		{
+			Product:          "changes",
+			Version:          "1.0.0",
+			CreatedAt:        time.Date(2026, 4, 1, 18, 0, 0, 0, time.UTC),
+			AddedFragmentIDs: []string{"f1"},
+		},
+		{
+			Product:          "changes",
+			Version:          "1.1.0-rc.1",
+			ParentVersion:    "1.0.0",
+			CreatedAt:        time.Date(2026, 4, 2, 18, 0, 0, 0, time.UTC),
+			AddedFragmentIDs: []string{"f2"},
+		},
+		{
+			Product:          "changes",
+			Version:          "1.1.0-rc.2",
+			ParentVersion:    "1.1.0-rc.1",
+			CreatedAt:        time.Date(2026, 4, 2, 19, 0, 0, 0, time.UTC),
+			AddedFragmentIDs: []string{"f3"},
+		},
+		{
+			Product:          "changes",
+			Version:          "1.1.0",
+			ParentVersion:    "1.0.0",
+			CreatedAt:        time.Date(2026, 4, 3, 18, 0, 0, 0, time.UTC),
+			AddedFragmentIDs: []string{"f4"},
+			DisplayTitle:     "Version 1.1",
+		},
+		{
+			Product:          "other",
+			Version:          "9.0.0",
+			CreatedAt:        time.Date(2026, 4, 4, 18, 0, 0, 0, time.UTC),
+			AddedFragmentIDs: []string{"x1"},
+		},
+	}
+
+	if head := LatestFinalHead(records); head == nil || head.Version != "9.0.0" {
+		t.Fatalf("LatestFinalHead = %#v, want other/9.0.0", head)
+	}
+	if head := LatestStableHead(records); head == nil || head.Version != "9.0.0" {
+		t.Fatalf("LatestStableHead = %#v, want other/9.0.0", head)
+	}
+	if head := LatestFinalHeadForProduct(records, "changes"); head == nil || head.Version != "1.1.0" {
+		t.Fatalf("LatestFinalHeadForProduct = %#v, want changes/1.1.0", head)
+	}
+	if head := PrereleaseHead(records, "changes", "1.1.0", "rc"); head == nil || head.Version != "1.1.0-rc.2" {
+		t.Fatalf("PrereleaseHead = %#v, want changes/1.1.0-rc.2", head)
+	}
+
+	heads := PrereleaseHeads(records, "changes")
+	if len(heads) != 1 || heads[0].Version != "1.1.0-rc.2" {
+		t.Fatalf("PrereleaseHeads = %#v, want rc.2 head", heads)
+	}
+
+	versions := PrereleaseVersionsForLine(records, "changes", "1.1.0", "rc")
+	if len(versions) != 2 || versions[0].String() != "1.1.0-rc.1" || versions[1].String() != "1.1.0-rc.2" {
+		t.Fatalf("PrereleaseVersionsForLine = %#v", versions)
+	}
+
+	record, err := FindBaseRecord(records, "changes", "1.1.0+docs.5")
+	if err != nil {
+		t.Fatalf("FindBaseRecord returned error: %v", err)
+	}
+	if record.Version != "1.1.0" {
+		t.Fatalf("FindBaseRecord version = %q, want 1.1.0", record.Version)
+	}
+	if !record.IsBaseRecord() || record.IsCompanionRecord() || record.IsPrerelease() {
+		t.Fatalf("base record flags = %#v", record)
+	}
+	if got := record.TargetVersion(); got != "1.1.0" {
+		t.Fatalf("TargetVersion = %q, want 1.1.0", got)
+	}
+	if got := record.EffectiveDisplayTitle(); got != "Version 1.1" {
+		t.Fatalf("EffectiveDisplayTitle = %q, want Version 1.1", got)
+	}
+}
+
+func TestPreviewWrapperMatchesPrereleaseWrapper(t *testing.T) {
+	all := []fragments.Fragment{
+		{Metadata: fragments.Metadata{ID: "f1"}, Body: "one"},
+		{Metadata: fragments.Metadata{ID: "f2"}, Body: "two"},
+	}
+	records := []ReleaseRecord{
+		{
+			Product:          "changes",
+			Version:          "1.0.0",
+			CreatedAt:        time.Date(2026, 4, 1, 18, 0, 0, 0, time.UTC),
+			AddedFragmentIDs: []string{"f1"},
+		},
+	}
+
+	preview, err := UnreleasedPreviewFragments(all, records, "changes", "1.1.0", "rc")
+	if err != nil {
+		t.Fatalf("UnreleasedPreviewFragments returned error: %v", err)
+	}
+	prerelease, err := UnreleasedPrereleaseFragments(all, records, "changes", "1.1.0", "rc")
+	if err != nil {
+		t.Fatalf("UnreleasedPrereleaseFragments returned error: %v", err)
+	}
+	if got := fragmentIDs(preview); !equalIDs(got, fragmentIDs(prerelease)) {
+		t.Fatalf("preview fragments = %#v, prerelease fragments = %#v", fragmentIDs(preview), fragmentIDs(prerelease))
+	}
+}
+
 func fragmentIDs(items []fragments.Fragment) []string {
 	out := make([]string, 0, len(items))
 	for _, item := range items {

@@ -52,3 +52,43 @@ func TestRebuildDeterministic(t *testing.T) {
 		t.Fatalf("Rebuild mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, string(wantBytes))
 	}
 }
+
+func TestRebuildUsesDocumentHeaderWhenNoFinalReleaseExists(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := config.Default()
+	cfg.RenderProfiles = map[string]config.RenderProfile{
+		config.RenderProfileRepositoryMarkdown: {
+			DocumentHeader: "# Changelog",
+		},
+	}
+
+	got, err := Rebuild(repoRoot, cfg, nil, nil)
+	if err != nil {
+		t.Fatalf("Rebuild returned error: %v", err)
+	}
+	if got != "# Changelog\n" {
+		t.Fatalf("Rebuild = %q, want %q", got, "# Changelog\n")
+	}
+}
+
+func TestWritePersistsChangelogToConfiguredPath(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := config.Default()
+	cfg.Project.ChangelogFile = filepath.Join("docs", "CHANGELOG.md")
+
+	if err := os.MkdirAll(filepath.Dir(config.ChangelogPath(repoRoot, cfg)), 0o755); err != nil {
+		t.Fatalf("mkdir changelog dir: %v", err)
+	}
+
+	if err := Write(repoRoot, cfg, "content\n"); err != nil {
+		t.Fatalf("Write returned error: %v", err)
+	}
+
+	raw, err := os.ReadFile(config.ChangelogPath(repoRoot, cfg))
+	if err != nil {
+		t.Fatalf("read changelog: %v", err)
+	}
+	if string(raw) != "content\n" {
+		t.Fatalf("changelog = %q, want %q", string(raw), "content\n")
+	}
+}
