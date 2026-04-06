@@ -128,7 +128,7 @@ Inspect the derived impact evidence with `changes status --explain`. In a TTY, `
 - If no final base release record exists, `project.initial_version` remains the deterministic first stable baseline.
 - Unreleased fragments not reachable from the latest final head determine the recommended bump through semantic levers plus `versioning.public_api`.
 - Prerelease suggestion targets the next final version and increments the prerelease number within the same target version and label.
-- Prerelease labels are explicit per release command, such as `changes release --pre beta`; there is no configured default label.
+- Prerelease labels are explicit per release command, such as `changes release --accept --pre beta`; there is no configured default label.
 
 Repositories that adopt `changes` mid-lifecycle usually move onto an explicit release-record baseline immediately through `changes init --current-version <semver>`. Brand-new repositories that initialize with `unreleased` continue to rely on `project.initial_version` until their first final release record exists.
 

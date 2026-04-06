@@ -564,10 +564,10 @@ func (a *App) printHelp(path []string) {
 	switch strings.Join(path, " ") {
 	case "":
 		body = strings.TrimSpace(`
-changes is a fragment-driven changelog and release-notes CLI.
+	changes is a language-agnostic changelog and release-notes tool for Git repositories.
 
-Usage:
-  changes <command> [options]
+	Usage:
+	  changes <command> [options]
 
 Commands:
   init
