@@ -35,6 +35,9 @@ func (e *AuthorityError) Error() string {
 		}
 		return fmt.Sprintf("%s authority is ambiguous between %s; run %s", e.Scope, strings.Join(styles, ", "), command)
 	case StatusLegacyOnly:
+		if e.Scope == ScopeRepo {
+			return fmt.Sprintf("%s authority is legacy-only; run %s --repair", e.Scope, command)
+		}
 		return fmt.Sprintf("%s authority is legacy-only; run %s", e.Scope, command)
 	case StatusInvalid:
 		return fmt.Sprintf("%s authority has an invalid manifest; run %s", e.Scope, command)

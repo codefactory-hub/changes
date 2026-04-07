@@ -704,7 +704,7 @@ func TestCLIWarnsOrFailsConsistentlyAcrossFocusedRolloutScenarios(t *testing.T) 
 		if err == nil {
 			t.Fatalf("status returned nil error")
 		}
-		if !strings.Contains(stderr.String(), "error: repo authority is legacy-only") || !strings.Contains(stderr.String(), "changes doctor --scope repo") {
+		if !strings.Contains(stderr.String(), "error: repo authority is legacy-only") || !strings.Contains(stderr.String(), "changes doctor --scope repo --repair") {
 			t.Fatalf("status stderr missing legacy doctor guidance:\n%s", stderr.String())
 		}
 		if stdout.Len() != 0 {
