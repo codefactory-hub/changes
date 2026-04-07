@@ -253,6 +253,7 @@ func (a *App) runDoctor(ctx context.Context, args []string) error {
 	var scope string
 	var explain bool
 	var jsonOutput bool
+	var repair bool
 	var migrationPrompt bool
 	var to string
 	var home string
@@ -261,6 +262,7 @@ func (a *App) runDoctor(ctx context.Context, args []string) error {
 	fs.StringVar(&scope, "scope", "", "Inspection scope")
 	fs.BoolVar(&explain, "explain", false, "Show candidate and warning detail")
 	fs.BoolVar(&jsonOutput, "json", false, "Emit structured inspection JSON")
+	fs.BoolVar(&repair, "repair", false, "Repair one repo-local legacy layout by restoring its manifest")
 	fs.BoolVar(&migrationPrompt, "migration-prompt", false, "Generate a migration brief")
 	fs.StringVar(&to, "to", "", "Destination layout style")
 	fs.StringVar(&home, "home", "", "Destination home path for home layouts")
@@ -271,6 +273,24 @@ func (a *App) runDoctor(ctx context.Context, args []string) error {
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("usage: changes doctor [--scope global|repo|all] [--explain] [--json]")
+	}
+	if repair && explain {
+		return fmt.Errorf("doctor: --repair cannot be combined with --explain")
+	}
+	if repair && jsonOutput {
+		return fmt.Errorf("doctor: --repair cannot be combined with --json")
+	}
+	if repair && migrationPrompt {
+		return fmt.Errorf("doctor: --repair cannot be combined with --migration-prompt")
+	}
+	if repair && strings.TrimSpace(to) != "" {
+		return fmt.Errorf("doctor: --repair cannot be combined with --to")
+	}
+	if repair && strings.TrimSpace(home) != "" {
+		return fmt.Errorf("doctor: --repair cannot be combined with --home")
+	}
+	if repair && strings.TrimSpace(outputPath) != "" {
+		return fmt.Errorf("doctor: --repair cannot be combined with --output")
 	}
 	if explain && jsonOutput {
 		return fmt.Errorf("doctor: --explain and --json cannot be combined")
@@ -313,6 +333,9 @@ func (a *App) runDoctor(ctx context.Context, args []string) error {
 	if !insideRepo && (doctorScope == appsvc.DoctorScopeRepo || doctorScope == appsvc.DoctorScopeAll) {
 		return fmt.Errorf("doctor: %s scope requires running inside a Git repository", doctorScope)
 	}
+	if repair && doctorScope != appsvc.DoctorScopeRepo {
+		return fmt.Errorf("doctor: --repair requires --scope repo")
+	}
 	if migrationPrompt && doctorScope == appsvc.DoctorScopeAll {
 		return fmt.Errorf("doctor: --migration-prompt requires --scope global or --scope repo")
 	}
@@ -331,6 +354,7 @@ func (a *App) runDoctor(ctx context.Context, args []string) error {
 	result, err := appsvc.Doctor(ctx, appsvc.DoctorRequest{
 		RepoRoot:                repoRoot,
 		Scope:                   doctorScope,
+		Repair:                  repair,
 		GenerateMigrationPrompt: migrationPrompt,
 		DestinationStyle:        destinationStyle,
 		DestinationHome:         home,
@@ -707,17 +731,20 @@ Usage:
 Show the current version state, unreleased fragment counts, the policy-derived recommended bump, the recommended next final version, and active prerelease heads.
 `)
 	case "doctor":
-		body = strings.TrimSpace(`
+	body = strings.TrimSpace(`
 Usage:
   changes doctor [--scope global|repo|all] [--explain] [--json]
+  changes doctor --scope repo --repair
   changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH] [--output PATH]
 
 Inspect layout authority and migration state without mutating any layout.
+Repair one legacy repo-local layout by restoring its authoritative manifest without moving data.
 
 Options:
   --scope <global|repo|all>       Scope to inspect
   --explain                       Show candidate and warning detail
   --json                          Emit structured inspection JSON
+  --repair                        Restore one repo-local legacy layout manifest
   --migration-prompt              Generate an advisory Markdown migration brief
   --to <xdg|home>                 Destination layout style for migration prompts
   --home <path>                   Destination home path when --to home
@@ -858,6 +885,21 @@ func parseDoctorStyle(raw string) (config.Style, error) {
 
 func (a *App) renderDoctorConcise(repoRoot string, result appsvc.DoctorResult) {
 	for _, scopeResult := range doctorScopeResults(result) {
+		if scopeResult.Repair != nil {
+			_, _ = fmt.Fprintf(
+				a.Stdout,
+				"%s: repaired %s\n",
+				scopeResult.Scope,
+				scopeResult.Repair.AuthoritativeStyle,
+			)
+			_, _ = fmt.Fprintf(a.Stdout, "manifest: %s\n", doctorDisplayPath(repoRoot, scopeResult.Scope, scopeResult.Repair.ManifestPath))
+			_, _ = fmt.Fprintf(a.Stdout, "authoritative: %s\n", scopeResult.Repair.AuthoritativeStyle)
+			_, _ = fmt.Fprintf(a.Stdout, "root: %s\n", doctorDisplayPath(repoRoot, scopeResult.Scope, scopeResult.Repair.AuthoritativeRoot))
+			if scopeResult.Repair.GitignoreUpdated {
+				_, _ = fmt.Fprintln(a.Stdout, "updated .gitignore")
+			}
+			continue
+		}
 		line := fmt.Sprintf("%s: %s", scopeResult.Scope, scopeResult.Status)
 		if scopeResult.SelectedStyle != "" {
 			line = fmt.Sprintf("%s %s %s", line, scopeResult.SelectedStyle, doctorDisplayPath(repoRoot, scopeResult.Scope, scopeResult.SelectedRoot))

@@ -131,6 +131,7 @@ Use `doctor` to inspect layout resolution, authority warnings, and migration gui
 
 ```text
 changes doctor [--scope global|repo|all] [--explain] [--json]
+changes doctor --scope repo --repair
 changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH] [--output PATH]
 ```
 
@@ -141,13 +142,18 @@ changes init
 changes init --layout home
 changes init global --layout home
 changes doctor --scope repo --explain
+changes doctor --scope repo --repair
 changes doctor --scope global
 changes doctor --migration-prompt --scope repo --to home
 ```
 
 By default, `changes doctor` inspects the repo scope when you are inside a repository. Use `--scope global` or `--scope all` when you need broader inspection. `--migration-prompt` prints the advisory Markdown brief to stdout unless you supply `--output PATH`.
 
-Existing repos initialized by current `changes` flows include `layout.toml` and continue to operate normally. Older repos that only have legacy directory/config shapes without `layout.toml` are treated as legacy layouts: inspect them with `changes doctor --scope repo --explain` and generate migration help with `changes doctor --migration-prompt --scope repo --to home` or the corresponding `xdg` target before expecting ordinary commands to succeed.
+Existing repos initialized by current `changes` flows include `layout.toml` and continue to operate normally. Older repos that only have legacy directory/config shapes without `layout.toml` are treated as legacy layouts.
+
+Use `changes doctor --scope repo --repair` when exactly one repo-local legacy layout already contains the real config/data/state directories and only needs its authoritative manifest restored. Repair stamps `layout.toml`, preserves the authoritative repo-local state ignore rule, and does not move data.
+
+Use `changes doctor --migration-prompt --scope repo --to home` or the corresponding `xdg` target when the repo has conflicting repo-local layouts, when you need to relocate data, or when you want explicit migration guidance before changing on-disk state.
 
 ## Current command surface
 
@@ -159,6 +165,7 @@ changes create --public-api add --edit
 changes status
 changes status --explain
 changes doctor [--scope global|repo|all] [--explain] [--json]
+changes doctor --scope repo --repair
 changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH] [--output PATH]
 changes release
 changes release --accept
