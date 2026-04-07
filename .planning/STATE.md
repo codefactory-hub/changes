@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_execute
-stopped_at: Completed 05-rollout-verification-02-PLAN.md
+status: planning
+stopped_at: Completed Phase 05-rollout-verification
 last_updated: "2026-04-07T03:44:03Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 10
   completed_plans: 10
   percent: 100
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 05 — rollout-verification
+**Current focus:** Milestone closeout
 
 ## Current Position
 
-Phase: 05 (rollout-verification) — READY TO EXECUTE
-Plan: 2 of 2 complete
-Status: Completed, awaiting phase verification
+Phase set: All roadmap phases complete
+Plan: All 10 plans complete
+Status: Ready for milestone completion or audit
 Last activity: 2026-04-07
 
 Progress: [██████████] 100%
@@ -101,6 +101,7 @@ Recent decisions affecting current work:
 - [Phase 05-rollout-verification]: The focused precedence set is now locked in tests for repo/global init defaults, `[repo.init]`, `CHANGES_HOME`, XDG env signals, and explicit flag priority.
 - [Phase 05-rollout-verification]: Mixed rollout compatibility is now explicit in tests: manifest-backed repos operate normally, while legacy repos fail cleanly and remain diagnosable through `doctor`.
 - [Phase 05-rollout-verification]: The README now states the legacy rollout boundary explicitly and points older repos without `layout.toml` toward doctor-guided repair or migration.
+- [Phase 05-rollout-verification]: Phase verification passed for the focused precedence set, manifest-backed compatibility, legacy diagnosability, and the final layered regression matrix.
 
 ### Pending Todos
 
@@ -108,10 +109,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Phase 05 is ready for final verification and closure.
+- No current blockers; the roadmap is complete and the next step is milestone completion or audit.
 
 ## Session Continuity
 
 Last session: 2026-04-07T02:54:05.043Z
-Stopped at: Completed 05-rollout-verification-02-PLAN.md
-Resume file: .planning/phases/05-rollout-verification/05-CONTEXT.md
+Stopped at: Completed Phase 05-rollout-verification
+Resume file: .planning/phases/05-rollout-verification/05-VERIFICATION.md
