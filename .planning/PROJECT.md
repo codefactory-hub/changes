@@ -2,11 +2,23 @@
 
 ## What This Is
 
-`changes` is a Go CLI for managing release fragments, release records, and rendered release notes from canonical project history. The next project focus is to make its global and repo-local storage layout flexible so operators can use either XDG-style directories or a single-root `changes_home` layout without losing migration safety or clarity about which location is authoritative.
+`changes` is a Go CLI for managing release fragments, release records, and rendered release notes from canonical project history. As of `0.1.0-rc.1`, it supports flexible global and repo-local storage layouts through `xdg` and `home` styles, manifest-backed authority selection, `doctor`-based inspection, and migration-oriented guidance for operators moving between supported layouts.
 
 ## Core Value
 
 `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
+
+## Current State
+
+- Shipped milestone: `0.1.0-rc.1` on 2026-04-07
+- Current operator model:
+  - `xdg` remains the default layout style
+  - `home` is supported for global `CHANGES_HOME` and repo-local `.changes` style layouts
+  - ordinary commands require manifest-backed authoritative layouts
+  - legacy no-manifest layouts are diagnosable with `changes doctor` and require repair or migration before normal operation
+- Current milestone archive:
+  - Roadmap: `.planning/milestones/v0.1.0-rc.1-ROADMAP.md`
+  - Requirements: `.planning/milestones/v0.1.0-rc.1-REQUIREMENTS.md`
 
 ## Requirements
 
@@ -17,19 +29,24 @@
 - ✓ Users can inspect current release state, recommended version bump, and prerelease lineage from file-backed state — existing
 - ✓ Users can record release records and render release output through named profiles and templates — existing
 - ✓ Users can keep release metadata in repo-local XDG-style paths resolved through a single config/path layer — existing
+- ✓ Users can resolve global config, data, and state through either XDG-style directories or a single-root `CHANGES_HOME` layout — `0.1.0-rc.1`
+- ✓ Users can resolve repo-local config, data, and state through either repo-local XDG-style directories or a single-root `home` layout — `0.1.0-rc.1`
+- ✓ Users can inspect active layout authority, precedence, and ambiguity through `changes doctor` — `0.1.0-rc.1`
+- ✓ Users can generate migration-oriented layout briefs with deterministic source and destination facts — `0.1.0-rc.1`
+- ✓ Users get fail-loud single-target writes, explicit ambiguity handling, and rollout-safe init defaults for layout management — `0.1.0-rc.1`
 
 ### Active
 
-- [ ] Support a global single-root `CHANGES_HOME` layout alongside XDG-style global paths, with clear precedence and deterministic path resolution
-- [ ] Support a repo-local single-root layout such as `./.changes` alongside repo-local XDG-style paths, with clear authoritative selection rules
-- [ ] Fail safely when multiple valid layout roots exist and explain how the user should choose a single authoritative location
-- [ ] Generate an LLM-oriented migration prompt that includes deterministically gathered origin and destination layout details
-- [ ] Record low-churn structural layout metadata so `changes` can reason about supported layouts without rewriting manifests during ordinary commands
-- [ ] Define and document clean command shapes for `init`, `init global`, and `doctor` flows that cover inspection, migration help, and initialization
-- [ ] Keep write behavior single-target only; never dual-write to competing layouts
-- [ ] Make the default behavior XDG-style while still allowing environment- or repo-level single-root overrides
+- [ ] Validate operator-completed migrations against the expected source and destination layouts
+- [ ] Support future directory schema revisions beyond the first flexible-layout rollout
 
-### Out of Scope
+## Next Milestone Goals
+
+- Add explicit migration-result validation so operators can confirm a manual or LLM-assisted layout migration landed in the intended authoritative destination
+- Design a forward-compatible directory schema revision story beyond schema version 1
+- Decide whether the precedence test matrix should expand from the focused rollout set to a fuller combinatorial matrix
+
+## Out of Scope
 
 - Automatic dual-write synchronization between layouts — this risks silent divergence and makes authoritative state ambiguous
 - Silent conflict resolution when multiple supported layout roots already exist — the tool should stop and force an explicit choice
@@ -38,17 +55,17 @@
 
 ## Context
 
-This is a brownfield CLI with a current repo-local XDG-style layout anchored in `internal/config/config.go` and used across `internal/app/`, `internal/fragments/`, `internal/releases/`, and `internal/render/`. The new effort is not about adding another ad hoc path helper; it is about designing a durable layout-resolution model that can support both global and repo-local storage styles, make precedence legible, preserve migration-safe reads, and expose command UX that users can understand before any file movement occurs.
+This is now a brownfield CLI that ships the first flexible-layout milestone. The codebase includes a shared resolver core in `internal/config/`, authority-aware app and CLI flows in `internal/app/` and `internal/cli/`, and rollout coverage that locks the precedence and compatibility boundary. The current product state is intentionally conservative: manifest-backed layouts are the operational boundary, and legacy repositories are handled through explicit `doctor` inspection and migration guidance rather than hidden compatibility heuristics.
 
-The user wants the defaults and precedence model to be explicit, especially the distinction between global and per-repository layout choices. They also want proposal-quality command shapes and migration UX reviewed before implementation starts, then locked into planning artifacts before implementation begins. Existing codebase mapping in `.planning/codebase/` should be treated as reference material for where the current path assumptions live.
+The next work should build on that shipped boundary rather than reopening it casually. Existing codebase mapping in `.planning/codebase/` and the archived milestone docs should be treated as the reference record for how the current layout model was introduced.
 
 ## Constraints
 
-- **Compatibility**: Existing XDG-style repositories must continue to work — layout flexibility cannot strand current users
+- **Compatibility**: Manifest-backed repositories must continue to work without regression; legacy repositories without manifests must fail cleanly and remain diagnosable
 - **Safety**: Single authoritative write target only — no dual writes, silent merges, or hidden precedence
 - **Clarity**: Global and repo-local layout behavior must be documented and inspectable — operators need to understand what path won and why
 - **Migration**: Layout changes must preserve operator trust — migration assistance should be explicit, reproducible, and non-destructive by default
-- **Scope**: Design and command UX must be agreed before implementation — proposal work comes first
+- **Scope**: Future milestones should extend the shipped layout model rather than relitigating the Phase 1-5 contract without a new proposal
 
 ## Key Decisions
 
@@ -82,4 +99,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-06 after design lock-in*
+*Last updated: 2026-04-07 after `0.1.0-rc.1` milestone closeout*

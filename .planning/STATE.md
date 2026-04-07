@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: planning
-stopped_at: Completed Phase 05-rollout-verification
-last_updated: "2026-04-07T03:44:03Z"
+milestone: v0.1.0-rc.1
+milestone_name: flexible-layout-resolution
+status: ready_for_next_milestone
+stopped_at: Milestone closeout completed
+last_updated: "2026-04-07T12:00:00Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 5
@@ -18,16 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-06)
+See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Milestone closeout
+**Current focus:** Next milestone definition
 
 ## Current Position
 
-Phase set: All roadmap phases complete
-Plan: All 10 plans complete
-Status: Ready for milestone completion or audit
+Shipped milestone: `0.1.0-rc.1`
+Archived roadmap: `.planning/milestones/v0.1.0-rc.1-ROADMAP.md`
+Archived requirements: `.planning/milestones/v0.1.0-rc.1-REQUIREMENTS.md`
+Status: Ready for `/gsd-new-milestone`
 Last activity: 2026-04-07
 
 Progress: [██████████] 100%
@@ -105,14 +106,14 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- Start the next milestone with `/gsd-new-milestone`
 
 ### Blockers/Concerns
 
-- No current blockers; the roadmap is complete and the next step is milestone completion or audit.
+- No current blockers; the shipped milestone is archived and the next step is defining the next milestone.
 
 ## Session Continuity
 
-Last session: 2026-04-07T02:54:05.043Z
-Stopped at: Completed Phase 05-rollout-verification
-Resume file: .planning/phases/05-rollout-verification/05-VERIFICATION.md
+Last session: 2026-04-07T12:00:00Z
+Stopped at: Milestone closeout completed
+Resume file: .planning/milestones/v0.1.0-rc.1-ROADMAP.md
