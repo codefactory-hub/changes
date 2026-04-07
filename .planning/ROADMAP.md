@@ -53,8 +53,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: Add authoritative-layout detection and competing-layout diagnostics
-- [ ] 03-02: Add schema/version metadata and enforce single-target write behavior
+- [ ] 03-01-PLAN.md — Tighten resolver authority rules, schema-version validity, and structured warning/error contracts
+- [ ] 03-02-PLAN.md — Wire authority checks into config, app, and CLI entry points to prevent dual writes
 
 ### Phase 4: Command UX and Migration Help
 **Goal**: Expose the new behavior through clear commands, migration prompt generation, and updated docs
