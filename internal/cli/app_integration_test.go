@@ -313,6 +313,101 @@ func TestAppHelpSurface(t *testing.T) {
 	}
 }
 
+func TestInitHelpSurfaceIncludesLayoutFlags(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+
+	if err := app.Run(context.Background(), []string{"help", "init"}); err != nil {
+		t.Fatalf("help init returned error: %v", err)
+	}
+	initHelp := stdout.String()
+	if !strings.Contains(initHelp, "changes init [--current-version <semver|unreleased>] [--layout xdg|home] [--home PATH]") {
+		t.Fatalf("init help missing layout flags:\n%s", initHelp)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"help", "init", "global"}); err != nil {
+		t.Fatalf("help init global returned error: %v", err)
+	}
+	globalHelp := stdout.String()
+	if !strings.Contains(globalHelp, "changes init global [--layout xdg|home] [--home PATH]") {
+		t.Fatalf("init global help missing layout flags:\n%s", globalHelp)
+	}
+	if strings.Contains(globalHelp, "--current-version") {
+		t.Fatalf("init global help should not mention --current-version:\n%s", globalHelp)
+	}
+}
+
+func TestInitGlobalHomeReportsResolvedPaths(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("CHANGES_HOME", filepath.Join(homeDir, ".changes-home-env"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config-home"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(homeDir, ".data-home"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(homeDir, ".state-home"))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 7, 3, 15, 0, 0, time.UTC)
+	}
+	app.IsTTY = func() bool { return false }
+
+	customHome := filepath.Join(homeDir, ".changes-global")
+	if err := app.Run(context.Background(), []string{"init", "global", "--layout", "home", "--home", customHome}); err != nil {
+		t.Fatalf("init global returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "initialized global home") {
+		t.Fatalf("init global stdout missing layout summary:\n%s", output)
+	}
+	for _, line := range []string{
+		"config: " + filepath.Join(customHome, "config"),
+		"data: " + filepath.Join(customHome, "data"),
+		"state: " + filepath.Join(customHome, "state"),
+	} {
+		if !strings.Contains(output, line) {
+			t.Fatalf("init global stdout missing %q:\n%s", line, output)
+		}
+	}
+}
+
+func TestInitRejectsHomeFlagWithoutHomeLayout(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.IsTTY = func() bool { return false }
+
+	err := app.Run(context.Background(), []string{"init", "--home", ".changes"})
+	if err == nil {
+		t.Fatalf("init --home without home layout returned nil error")
+	}
+	if !strings.Contains(stderr.String(), "--home is only valid when --layout home") {
+		t.Fatalf("unexpected stderr for repo init:\n%s", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err = app.Run(context.Background(), []string{"init", "global", "--home", filepath.Join(t.TempDir(), ".changes-global")})
+	if err == nil {
+		t.Fatalf("init global --home without home layout returned nil error")
+	}
+	if !strings.Contains(stderr.String(), "--home is only valid when --layout home") {
+		t.Fatalf("unexpected stderr for global init:\n%s", stderr.String())
+	}
+}
+
 func TestDoctorDefaultsToRepoScopeInsideRepository(t *testing.T) {
 	repoRoot := t.TempDir()
 	gitInit(t, repoRoot)
