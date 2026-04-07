@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.1.0-rc.2
 milestone_name: legacy-layout-repair
-status: planning
-stopped_at: Milestone started
-last_updated: "2026-04-07T13:00:00Z"
+status: ready_to_execute
+stopped_at: Planned Phase 6
+last_updated: "2026-04-07T13:15:00Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
+  total_plans: 1
   completed_plans: 0
   percent: 0
 ---
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Milestone `0.1.0-rc.2` definition
+**Current focus:** Phase 6 ready to execute
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements for `0.1.0-rc.2`
+Phase: 6 — Legacy Layout Repair
+Plan: 06-01
+Status: Ready to execute
 Last activity: 2026-04-07
 
 Progress: [░░░░░░░░░░] 0%
@@ -105,7 +105,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Plan Phase 6: Legacy Layout Repair
+- Execute Phase 6: Legacy Layout Repair
 
 ### Blockers/Concerns
 
@@ -117,6 +117,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-07T13:00:00Z
-Stopped at: Milestone started
-Resume file: .planning/ROADMAP.md
+Last session: 2026-04-07T13:15:00Z
+Stopped at: Planned Phase 6
+Resume file: .planning/phases/06-legacy-layout-repair/06-01-PLAN.md

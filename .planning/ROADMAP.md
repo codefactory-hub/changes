@@ -20,7 +20,10 @@ This milestone closes the most immediate operator gap left by `0.1.0-rc.1`: exis
   1. A legacy repo-local layout can be repaired without manual manifest authoring
   2. Repair fails loudly on ambiguity and does not migrate or dual-write data
   3. After repair, ordinary commands operate against the authoritative repo-local layout
-**Plans**: 0 plans
+**Plans**: 1 plan
+
+Plans:
+- [ ] 06-01-PLAN.md — Add the repo-local doctor repair flow, manifest stamping, CLI/operator guidance, and regression coverage
 
 ## Shipped Milestones
 
@@ -33,4 +36,4 @@ Phase 6 executes after the shipped `0.1.0-rc.1` milestone.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Legacy Layout Repair | 0/0 | Not started | — |
+| 6. Legacy Layout Repair | 0/1 | Not started | — |
