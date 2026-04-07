@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1.0-rc.1
-milestone_name: flexible-layout-resolution
-status: ready_for_next_milestone
-stopped_at: Milestone closeout completed
-last_updated: "2026-04-07T12:00:00Z"
+milestone: v0.1.0-rc.2
+milestone_name: legacy-layout-repair
+status: planning
+stopped_at: Milestone started
+last_updated: "2026-04-07T13:00:00Z"
 last_activity: 2026-04-07
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,17 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Next milestone definition
+**Current focus:** Milestone `0.1.0-rc.2` definition
 
 ## Current Position
 
-Shipped milestone: `0.1.0-rc.1`
-Archived roadmap: `.planning/milestones/v0.1.0-rc.1-ROADMAP.md`
-Archived requirements: `.planning/milestones/v0.1.0-rc.1-REQUIREMENTS.md`
-Status: Ready for `/gsd-new-milestone`
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements for `0.1.0-rc.2`
 Last activity: 2026-04-07
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -106,14 +105,18 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Start the next milestone with `/gsd-new-milestone`
+- Plan Phase 6: Legacy Layout Repair
 
 ### Blockers/Concerns
 
-- No current blockers; the shipped milestone is archived and the next step is defining the next milestone.
+- No current blockers; the next step is planning and executing Phase 6 for repo-local legacy repair.
+
+### Roadmap Evolution
+
+- Phase 6 added: Add a narrow repo-local repair flow for legacy layouts in milestone `0.1.0-rc.2`
 
 ## Session Continuity
 
-Last session: 2026-04-07T12:00:00Z
-Stopped at: Milestone closeout completed
-Resume file: .planning/milestones/v0.1.0-rc.1-ROADMAP.md
+Last session: 2026-04-07T13:00:00Z
+Stopped at: Milestone started
+Resume file: .planning/ROADMAP.md

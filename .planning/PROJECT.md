@@ -20,6 +20,15 @@
   - Roadmap: `.planning/milestones/v0.1.0-rc.1-ROADMAP.md`
   - Requirements: `.planning/milestones/v0.1.0-rc.1-REQUIREMENTS.md`
 
+## Current Milestone: v0.1.0-rc.2 Legacy Layout Repair
+
+**Goal:** close the operator gap for existing legacy repositories by adding an explicit repo-local repair path instead of requiring manual manifest creation.
+
+**Target features:**
+- add a `changes doctor --scope repo --repair` flow or equivalent narrow repair command
+- stamp the authoritative repo-local manifest for a legacy preferred candidate without migrating data
+- keep the repair path fail-loud on ambiguity and explicit about what changed
+
 ## Requirements
 
 ### Validated
@@ -37,14 +46,17 @@
 
 ### Active
 
+- [ ] Add an operator-friendly repair path for legacy repo-local layouts so users do not need to create `layout.toml` by hand
+- [ ] Ensure repair stamps exactly one authoritative layout and preserves single-target safety guarantees
+- [ ] Explain clearly when operators should use repair versus migration guidance
 - [ ] Validate operator-completed migrations against the expected source and destination layouts
 - [ ] Support future directory schema revisions beyond the first flexible-layout rollout
 
 ## Next Milestone Goals
 
-- Add explicit migration-result validation so operators can confirm a manual or LLM-assisted layout migration landed in the intended authoritative destination
-- Design a forward-compatible directory schema revision story beyond schema version 1
-- Decide whether the precedence test matrix should expand from the focused rollout set to a fuller combinatorial matrix
+- Add a narrow repo-local repair command for legacy layouts, likely centered on `changes doctor --scope repo --repair`
+- Make existing legacy repos recoverable without manual manifest authoring while preserving the current authority model
+- Keep migration validation and future schema evolution as follow-on work after the repair path lands
 
 ## Out of Scope
 
@@ -99,4 +111,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-07 after `0.1.0-rc.1` milestone closeout*
+*Last updated: 2026-04-07 for `0.1.0-rc.2` milestone start*
