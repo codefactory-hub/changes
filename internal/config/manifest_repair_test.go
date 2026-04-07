@@ -28,9 +28,9 @@ func TestRepoLayoutManifestWriterMatchesInitSymbolicForms(t *testing.T) {
 				State:  filepath.Join(repoRoot, ".local", "state", "changes"),
 			},
 			wantRoot:  "$REPO_ROOT",
-			wantCfg:   "$layout.root/.config/changes",
-			wantData:  "$layout.root/.local/share/changes",
-			wantState: "$layout.root/.local/state/changes",
+			wantCfg:   "$REPO_ROOT/.config/changes",
+			wantData:  "$REPO_ROOT/.local/share/changes",
+			wantState: "$REPO_ROOT/.local/state/changes",
 		},
 		{
 			name: "home",

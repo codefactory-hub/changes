@@ -176,7 +176,7 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 		return InitializeResult{}, fmt.Errorf("stat config: %w", statErr)
 	}
 	if _, statErr := os.Stat(layoutManifestPath); os.IsNotExist(statErr) {
-		raw, encodeErr := encodeTOML(repoLayoutManifest(selection, req.RepoRoot))
+		raw, encodeErr := config.WriteRepoLayoutManifest(selection, req.RepoRoot)
 		if encodeErr != nil {
 			return InitializeResult{}, encodeErr
 		}
@@ -617,29 +617,6 @@ func loadGlobalRepoInitDefaults(homeDir string) (string, string, []config.Author
 	return doc.Repo.Init.Style, doc.Repo.Init.Home, append([]config.AuthorityWarning(nil), check.Warnings...), nil
 }
 
-func repoLayoutManifest(selection config.RepoInitSelection, repoRoot string) layoutManifestDoc {
-	doc := layoutManifestDoc{
-		SchemaVersion: 1,
-		Scope:         string(config.ScopeRepo),
-		Style:         string(selection.Style),
-	}
-
-	switch selection.Style {
-	case config.StyleHome:
-		doc.Layout.Root = repoSymbolicPath(repoRoot, selection.Root)
-		doc.Layout.Config = "$layout.root/config"
-		doc.Layout.Data = "$layout.root/data"
-		doc.Layout.State = "$layout.root/state"
-	default:
-		doc.Layout.Root = "$REPO_ROOT"
-		doc.Layout.Config = "$REPO_ROOT/.config/changes"
-		doc.Layout.Data = "$REPO_ROOT/.local/share/changes"
-		doc.Layout.State = "$REPO_ROOT/.local/state/changes"
-	}
-
-	return doc
-}
-
 func globalLayoutManifest(selection config.GlobalInitSelection) layoutManifestDoc {
 	doc := layoutManifestDoc{
 		SchemaVersion: 1,
@@ -661,14 +638,6 @@ func globalLayoutManifest(selection config.GlobalInitSelection) layoutManifestDo
 	}
 
 	return doc
-}
-
-func repoSymbolicPath(repoRoot, absolute string) string {
-	rel, err := filepath.Rel(repoRoot, absolute)
-	if err != nil || rel == "." {
-		return "$REPO_ROOT"
-	}
-	return "$REPO_ROOT/" + filepath.ToSlash(rel)
 }
 
 func globalHomeSymbolicRoot(root string) string {

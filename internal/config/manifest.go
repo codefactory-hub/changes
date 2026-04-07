@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -28,6 +29,47 @@ type layoutDocument struct {
 		Data   string `toml:"data"`
 		State  string `toml:"state"`
 	} `toml:"layout"`
+}
+
+func WriteRepoLayoutManifest(selection RepoInitSelection, repoRoot string) ([]byte, error) {
+	doc := layoutDocument{
+		SchemaVersion: supportedLayoutSchemaVersion,
+		Scope:         ScopeRepo,
+		Style:         selection.Style,
+	}
+
+	switch selection.Style {
+	case StyleHome:
+		doc.Layout.Root = repoSymbolicPath(repoRoot, selection.Root)
+		doc.Layout.Config = "$layout.root/config"
+		doc.Layout.Data = "$layout.root/data"
+		doc.Layout.State = "$layout.root/state"
+	case StyleXDG:
+		doc.Layout.Root = "$REPO_ROOT"
+		doc.Layout.Config = "$REPO_ROOT/.config/changes"
+		doc.Layout.Data = "$REPO_ROOT/.local/share/changes"
+		doc.Layout.State = "$REPO_ROOT/.local/state/changes"
+	default:
+		return nil, fmt.Errorf("encode repo layout manifest: unsupported style %q", selection.Style)
+	}
+
+	return encodeLayoutDocument(doc)
+}
+
+func encodeLayoutDocument(doc layoutDocument) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(doc); err != nil {
+		return nil, fmt.Errorf("encode toml: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func repoSymbolicPath(repoRoot, absolute string) string {
+	rel, err := filepath.Rel(repoRoot, absolute)
+	if err != nil || rel == "." {
+		return "$REPO_ROOT"
+	}
+	return "$REPO_ROOT/" + filepath.ToSlash(rel)
 }
 
 func loadLayoutManifest(path string, scope Scope, style Style, candidatePaths LayoutPaths, opts ResolveOptions) (*LayoutManifest, error) {

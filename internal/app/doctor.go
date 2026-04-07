@@ -36,6 +36,22 @@ func Doctor(ctx context.Context, req DoctorRequest) (DoctorResult, error) {
 		},
 	}
 
+	if req.Repair {
+		if scope != DoctorScopeRepo {
+			return DoctorResult{}, fmt.Errorf("doctor: repair is supported only with --scope repo")
+		}
+		if req.GenerateMigrationPrompt {
+			return DoctorResult{}, fmt.Errorf("doctor: repair cannot be combined with migration prompt generation")
+		}
+		scopeResult, err := doctorRepairRepo(ctx, req.RepoRoot, opts)
+		if err != nil {
+			return DoctorResult{}, err
+		}
+		result.Repo = &scopeResult
+		result.Summary.StatusCounts[scopeResult.Status]++
+		return result, nil
+	}
+
 	switch scope {
 	case DoctorScopeGlobal:
 		scopeResult, err := doctorInspectScope(config.ScopeGlobal, opts)
@@ -85,6 +101,100 @@ func Doctor(ctx context.Context, req DoctorRequest) (DoctorResult, error) {
 	}
 
 	return result, nil
+}
+
+func doctorRepairRepo(ctx context.Context, repoRoot string, opts config.ResolveOptions) (result DoctorScopeResult, err error) {
+	if strings.TrimSpace(repoRoot) == "" {
+		return DoctorScopeResult{}, fmt.Errorf("doctor: repo root is required for repair")
+	}
+	if err := checkContext(ctx); err != nil {
+		return DoctorScopeResult{}, err
+	}
+
+	resolution, err := config.ResolveRepo(opts)
+	if err != nil {
+		return DoctorScopeResult{}, err
+	}
+
+	candidate, err := doctorRepairCandidate(resolution)
+	if err != nil {
+		return DoctorScopeResult{}, err
+	}
+	selection := selectionFromCandidate(candidate)
+	manifestPath := filepath.Join(selection.Config, "layout.toml")
+
+	tx := newInitTxn()
+	defer func() {
+		if err != nil {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				err = fmt.Errorf("%w; rollback failed: %v", err, rollbackErr)
+			}
+		}
+	}()
+
+	raw, err := config.WriteRepoLayoutManifest(selection, repoRoot)
+	if err != nil {
+		return DoctorScopeResult{}, err
+	}
+	if err := tx.WriteFileExclusive(manifestPath, raw, 0o644); err != nil {
+		return DoctorScopeResult{}, fmt.Errorf("doctor: write layout manifest: %w", err)
+	}
+	gitignoreUpdated, err := ensureGitignoreWithTx(tx, repoRoot, selection.GitignoreEntry)
+	if err != nil {
+		return DoctorScopeResult{}, err
+	}
+	if err := checkContext(ctx); err != nil {
+		return DoctorScopeResult{}, err
+	}
+
+	check, err := config.RequireRepoWriteAuthority(repoRoot)
+	if err != nil {
+		return DoctorScopeResult{}, fmt.Errorf("doctor: validate repaired repo authority: %w", err)
+	}
+	if check.Authoritative == nil || check.Authoritative.Style != candidate.Style || check.Authoritative.Paths.Root != candidate.Paths.Root {
+		return DoctorScopeResult{}, fmt.Errorf("doctor: repaired repo did not become authoritative at %s", candidate.Paths.Root)
+	}
+	if _, _, err := config.LoadWithAuthority(repoRoot); err != nil {
+		return DoctorScopeResult{}, fmt.Errorf("doctor: validate repaired repo operation: %w", err)
+	}
+
+	result, err = doctorInspectScope(config.ScopeRepo, opts)
+	if err != nil {
+		return DoctorScopeResult{}, err
+	}
+	result.Repair = &DoctorRepair{
+		Changed:            true,
+		ManifestPath:       manifestPath,
+		GitignoreUpdated:   gitignoreUpdated,
+		AuthoritativeStyle: string(check.Authoritative.Style),
+		AuthoritativeRoot:  check.Authoritative.Paths.Root,
+	}
+	return result, nil
+}
+
+func doctorRepairCandidate(resolution config.ScopeResolution) (config.Candidate, error) {
+	legacyCandidates := make([]config.Candidate, 0, len(resolution.Candidates))
+	resolvedCount := 0
+	for _, candidate := range resolution.Candidates {
+		switch candidate.Status {
+		case config.StatusResolved:
+			resolvedCount++
+		case config.StatusLegacyOnly:
+			legacyCandidates = append(legacyCandidates, candidate)
+		}
+	}
+
+	if resolvedCount > 0 {
+		return config.Candidate{}, fmt.Errorf("doctor: repo repair is only for legacy repo-local layouts without an authoritative manifest")
+	}
+	if len(legacyCandidates) == 0 {
+		return config.Candidate{}, fmt.Errorf("doctor: repo repair requires exactly one legacy repo-local candidate")
+	}
+	if len(legacyCandidates) > 1 {
+		return config.Candidate{}, fmt.Errorf("doctor: repo repair is ambiguous because multiple legacy repo-local candidates could be stamped; use changes doctor --migration-prompt --scope repo --to xdg|home [--home PATH]")
+	}
+
+	return legacyCandidates[0], nil
 }
 
 func doctorResolveOptions(repoRoot string) (config.ResolveOptions, error) {

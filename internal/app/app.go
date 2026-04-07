@@ -134,6 +134,7 @@ const (
 type DoctorRequest struct {
 	RepoRoot                string
 	Scope                   DoctorScope
+	Repair                  bool
 	GenerateMigrationPrompt bool
 	DestinationStyle        config.Style
 	DestinationHome         string
@@ -166,6 +167,15 @@ type DoctorScopeResult struct {
 	Candidates         []DoctorCandidate `json:"candidates"`
 	Warnings           []DoctorWarning   `json:"warnings"`
 	RepairHint         string            `json:"repair_hint"`
+	Repair             *DoctorRepair     `json:"repair,omitempty"`
+}
+
+type DoctorRepair struct {
+	Changed            bool   `json:"changed"`
+	ManifestPath       string `json:"manifest_path"`
+	GitignoreUpdated   bool   `json:"gitignore_updated"`
+	AuthoritativeStyle string `json:"authoritative_style"`
+	AuthoritativeRoot  string `json:"authoritative_root"`
 }
 
 type DoctorCandidate struct {
