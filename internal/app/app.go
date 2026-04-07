@@ -27,11 +27,11 @@ type InitializeRequest struct {
 }
 
 type InitializeResult struct {
-	RepoRoot         string
+	RepoRoot          string
 	AuthorityWarnings []config.AuthorityWarning
-	AdoptionFragment *fragments.Fragment
-	AdoptionRecord   *releases.ReleaseRecord
-	PromptPath       string
+	AdoptionFragment  *fragments.Fragment
+	AdoptionRecord    *releases.ReleaseRecord
+	PromptPath        string
 }
 
 type StatusRequest struct {
@@ -94,6 +94,93 @@ type RenderResult struct {
 	Record            releases.ReleaseRecord
 	Document          render.Document
 	Content           string
+}
+
+type DoctorScope string
+
+const (
+	DoctorScopeGlobal DoctorScope = "global"
+	DoctorScopeRepo   DoctorScope = "repo"
+	DoctorScopeAll    DoctorScope = "all"
+)
+
+const (
+	DoctorStatusAuthoritative = "authoritative"
+	DoctorStatusAmbiguous     = "ambiguous"
+	DoctorStatusLegacyOnly    = "legacy-detected"
+	DoctorStatusInvalid       = "invalid-manifest"
+	DoctorStatusUninitialized = "uninitialized"
+)
+
+type DoctorRequest struct {
+	RepoRoot                string
+	Scope                   DoctorScope
+	GenerateMigrationPrompt bool
+	DestinationStyle        config.Style
+	DestinationHome         string
+	Now                     time.Time
+}
+
+type DoctorResult struct {
+	RequestedScope  string             `json:"requested_scope"`
+	GeneratedAt     time.Time          `json:"generated_at"`
+	Global          *DoctorScopeResult `json:"global,omitempty"`
+	Repo            *DoctorScopeResult `json:"repo,omitempty"`
+	Summary         DoctorSummary      `json:"summary"`
+	MigrationPrompt string             `json:"-"`
+}
+
+type DoctorSummary struct {
+	StatusCounts map[string]int `json:"status_counts"`
+}
+
+type DoctorScopeResult struct {
+	Scope              string            `json:"scope"`
+	Status             string            `json:"status"`
+	SelectedStyle      string            `json:"selected_style,omitempty"`
+	SelectedRoot       string            `json:"selected_root,omitempty"`
+	PreferredStyle     string            `json:"preferred_style,omitempty"`
+	PreferredRoot      string            `json:"preferred_root,omitempty"`
+	AuthoritativeStyle string            `json:"authoritative_style,omitempty"`
+	AuthoritativeRoot  string            `json:"authoritative_root,omitempty"`
+	PrecedenceInputs   []string          `json:"precedence_inputs"`
+	Candidates         []DoctorCandidate `json:"candidates"`
+	Warnings           []DoctorWarning   `json:"warnings"`
+	RepairHint         string            `json:"repair_hint"`
+}
+
+type DoctorCandidate struct {
+	Scope           string             `json:"scope"`
+	Style           string             `json:"style"`
+	Status          string             `json:"status"`
+	Paths           config.LayoutPaths `json:"paths"`
+	Manifest        *DoctorManifest    `json:"manifest,omitempty"`
+	Evidence        []DoctorEvidence   `json:"evidence"`
+	IsPreferred     bool               `json:"is_preferred"`
+	IsAuthoritative bool               `json:"is_authoritative"`
+}
+
+type DoctorManifest struct {
+	SchemaVersion int                `json:"schema_version"`
+	Scope         string             `json:"scope"`
+	Style         string             `json:"style"`
+	Symbolic      config.LayoutPaths `json:"symbolic"`
+	Resolved      config.LayoutPaths `json:"resolved"`
+}
+
+type DoctorEvidence struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Exists bool   `json:"exists"`
+	Detail string `json:"detail,omitempty"`
+}
+
+type DoctorWarning struct {
+	Scope  string `json:"scope"`
+	Style  string `json:"style"`
+	Status string `json:"status"`
+	Path   string `json:"path"`
 }
 
 func Status(ctx context.Context, req StatusRequest) (StatusResult, error) {

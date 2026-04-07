@@ -199,11 +199,11 @@ func TestDoctorMigrationPromptIncludesDeterministicMetadata(t *testing.T) {
 	writeDoctorArtifact(t, filepath.Join(repoRoot, ".local", "state", "changes", "session.lock"))
 
 	result, err := Doctor(context.Background(), DoctorRequest{
-		RepoRoot:              repoRoot,
-		Scope:                 DoctorScopeRepo,
+		RepoRoot:                repoRoot,
+		Scope:                   DoctorScopeRepo,
 		GenerateMigrationPrompt: true,
-		DestinationStyle:      config.StyleHome,
-		DestinationHome:       ".changes-next",
+		DestinationStyle:        config.StyleHome,
+		DestinationHome:         ".changes-next",
 	})
 	if err != nil {
 		t.Fatalf("Doctor returned error: %v", err)
