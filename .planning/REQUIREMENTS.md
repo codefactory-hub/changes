@@ -19,8 +19,8 @@
 
 ### Ambiguity and Authority
 
-- [ ] **AUTH-01**: If multiple supported global or repo-local layouts exist at once, `changes` fails instead of choosing silently
-- [ ] **AUTH-02**: Ambiguity errors identify the competing authoritative candidates and suggest how to choose between them
+- [x] **AUTH-01**: If multiple supported global or repo-local layouts exist at once, `changes` fails instead of choosing silently
+- [x] **AUTH-02**: Ambiguity errors identify the competing authoritative candidates and suggest how to choose between them
 - [ ] **AUTH-03**: Ambiguity errors can direct the user to generate an LLM prompt to help merge or migrate to one authoritative location
 
 ### Migration and Schema Metadata
@@ -65,8 +65,8 @@
 | REPO-01 | Phase 2 | Complete |
 | REPO-02 | Phase 4 | Pending |
 | REPO-03 | Phase 2 | Complete |
-| AUTH-01 | Phase 3 | Pending |
-| AUTH-02 | Phase 3 | Pending |
+| AUTH-01 | Phase 3 | Complete |
+| AUTH-02 | Phase 3 | Complete |
 | AUTH-03 | Phase 4 | Pending |
 | MIGR-01 | Phase 2 | Complete |
 | MIGR-02 | Phase 4 | Pending |

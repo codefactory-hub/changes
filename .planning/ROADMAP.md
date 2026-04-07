@@ -53,7 +53,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Tighten resolver authority rules, schema-version validity, and structured warning/error contracts
+- [x] 03-01-PLAN.md — Tighten resolver authority rules, schema-version validity, and structured warning/error contracts
 - [ ] 03-02-PLAN.md — Wire authority checks into config, app, and CLI entry points to prevent dual writes
 
 ### Phase 4: Command UX and Migration Help
@@ -93,6 +93,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Layout Proposal | 2/2 | Complete | 2026-04-06 |
 | 2. Resolution Core | 2/2 | Complete   | 2026-04-06 |
-| 3. Authority and Safety | 0/2 | Not started | - |
+| 3. Authority and Safety | 1/2 | In Progress | - |
 | 4. Command UX and Migration Help | 0/2 | Not started | - |
 | 5. Rollout Verification | 0/2 | Not started | - |

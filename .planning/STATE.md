@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_execute
-stopped_at: Phase 3 plans verified
-last_updated: "2026-04-07T01:10:19Z"
-last_activity: 2026-04-07 -- Phase 3 plans created and verified
+status: executing
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-04-07T01:30:35.162Z"
+last_activity: 2026-04-07
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 6
-  completed_plans: 4
-  percent: 40
+  completed_plans: 5
+  percent: 83
 ---
 
 # Project State
@@ -21,24 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 3: Authority and Safety planned and verified
+**Current focus:** Phase 03 — authority-and-safety
 
 ## Current Position
 
-Phase: 3 of 5 (Authority and Safety)
-Plan: 2 of 2 in current phase
-Status: Ready to execute
-Last activity: 2026-04-07 -- Phase 3 plans created and verified
+Phase: 03 (authority-and-safety) — EXECUTING
+Plan: 2 of 2
+Status: Executing Phase 03
+Last activity: 2026-04-07 -- Completed 03-01 and advanced to 03-02
 
-Progress: [████░░░░░░] 40%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2
-- Average duration: 3 min
-- Total execution time: 0.1 hours
+- Total plans completed: 5
+- Average duration: 6 min
+- Total execution time: 0.5 hours
 
 **By Phase:**
 
@@ -46,14 +46,16 @@ Progress: [████░░░░░░] 40%
 |-------|-------|-------|----------|
 | 01-layout-proposal | 2 | 6 min | 3 min |
 | 02-resolution-core | 2 | 18 min | 9 min |
+| 03-authority-and-safety | 1 | 6m22s | 6m22s |
 
 **Recent Trend:**
 
-- Last 5 plans: 3 min, 3 min, 10 min, 8 min
-- Trend: Increasing on implementation phases
+- Last 5 plans: 3 min, 3 min, 10 min, 8 min, 6 min
+- Trend: Stable on implementation-heavy plans
 
 | Phase 02 P01 | 10m17s | 2 tasks | 5 files |
 | Phase 02 P02 | 508 | 3 tasks | 7 files |
+| Phase 03-authority-and-safety P01 | 6m22s | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -74,6 +76,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Compatibility helpers now treat resolver authoritative paths as the source of truth unless repo config explicitly overrides them.
 - [Phase 02]: Repo initialization selects layout through a shared config helper and writes a matching layout manifest during bootstrap.
 - [Phase 02]: InitializeRequest now carries optional layout and home inputs without widening the CLI surface in this phase.
+- [Phase 03-authority-and-safety]: Operational authority is determined by canonical authority groups instead of raw resolved-candidate count.
+- [Phase 03-authority-and-safety]: Resolved scopes keep structured sibling warnings so later CLI work can render them without re-deriving policy.
+- [Phase 03-authority-and-safety]: Authority failures stay typed and terse, with doctor as the next-step command for unresolved scopes.
 
 ### Pending Todos
 
@@ -81,10 +86,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Phase 3 is ready to execute from the committed plan set.
+- No current blockers; Plan 03-02 can build on the committed authority helper surface.
 
 ## Session Continuity
 
-Last session: 2026-04-07T01:10:19Z
-Stopped at: Phase 3 plans verified
-Resume file: .planning/phases/03-authority-and-safety/03-01-PLAN.md
+Last session: 2026-04-07T01:30:35.158Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None
