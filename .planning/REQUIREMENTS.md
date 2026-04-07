@@ -28,7 +28,7 @@
 - [x] **MIGR-01**: `changes` records structural layout schema metadata in managed layouts without rewriting it during ordinary command execution
 - [ ] **MIGR-02**: `changes` can generate an LLM prompt for migrating between supported layouts using deterministically gathered source and destination details
 - [ ] **MIGR-03**: Migration assistance includes origin metadata, destination metadata, and any detected ambiguity or conflict signals
-- [ ] **MIGR-04**: `changes` never dual-writes to origin and destination layouts during normal operation
+- [x] **MIGR-04**: `changes` never dual-writes to origin and destination layouts during normal operation
 
 ### Commands and Documentation
 
@@ -71,7 +71,7 @@
 | MIGR-01 | Phase 2 | Complete |
 | MIGR-02 | Phase 4 | Pending |
 | MIGR-03 | Phase 4 | Pending |
-| MIGR-04 | Phase 3 | Pending |
+| MIGR-04 | Phase 3 | Complete |
 | CMD-01 | Phase 1 | Complete |
 | CMD-02 | Phase 1 | Complete |
 | CMD-03 | Phase 1 | Complete |
