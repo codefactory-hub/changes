@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-command-ux-and-migration-help-01-PLAN.md
-last_updated: "2026-04-07T02:54:05.046Z"
+stopped_at: Completed 04-command-ux-and-migration-help-02-PLAN.md
+last_updated: "2026-04-07T03:20:03Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-06)
 
 Phase: 04 (command-ux-and-migration-help) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Completed, awaiting phase verification
 Last activity: 2026-04-07
 
 Progress: [█████████░] 88%
@@ -36,9 +36,9 @@ Progress: [█████████░] 88%
 
 **Velocity:**
 
-- Total plans completed: 7
-- Average duration: 7m48s
-- Total execution time: 0.9 hours
+- Total plans completed: 8
+- Average duration: 9m38s
+- Total execution time: 1.3 hours
 
 **By Phase:**
 
@@ -47,18 +47,19 @@ Progress: [█████████░] 88%
 | 01-layout-proposal | 2 | 6 min | 3 min |
 | 02-resolution-core | 2 | 18 min | 9 min |
 | 03-authority-and-safety | 2 | 19m22s | 9m41s |
-| 04-command-ux-and-migration-help | 2 | 12m34s | 12m34s |
+| 04-command-ux-and-migration-help | 2 | 30m21s | 15m10s |
 
 **Recent Trend:**
 
-- Last 5 plans: 10m17s, 8m28s, 6m22s, 13m, 12m34s
-- Trend: Stable on implementation-heavy plans with moderate end-to-end CLI wiring time
+- Last 5 plans: 8m28s, 6m22s, 13m, 12m34s, 17m47s
+- Trend: Slightly increasing as CLI and documentation phases add cross-surface verification work
 
 | Phase 02 P01 | 10m17s | 2 tasks | 5 files |
 | Phase 02 P02 | 508 | 3 tasks | 7 files |
 | Phase 03-authority-and-safety P01 | 6m22s | 2 tasks | 7 files |
 | Phase 03-authority-and-safety P02 | 13m | 3 tasks | 8 files |
 | Phase 04-command-ux-and-migration-help P01 | 12m34s | 2 tasks | 5 files |
+| Phase 04-command-ux-and-migration-help P02 | 17m47s | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,9 @@ Recent decisions affecting current work:
 - [Phase 04-command-ux-and-migration-help]: The app layer now exposes one structured doctor result that drives concise, explain, and JSON rendering without separate resolver paths.
 - [Phase 04-command-ux-and-migration-help]: Migration prompts remain advisory Markdown briefs with deterministic path and inventory facts, and they never read or embed file bodies.
 - [Phase 04-command-ux-and-migration-help]: Ambiguous authority failures now add migration-brief guidance only at the CLI boundary so the typed authority contract stays unchanged below it.
+- [Phase 04-command-ux-and-migration-help]: Repo and global init now share the approved minimal `--layout` and `--home` grammar and report explicit resolved paths on success.
+- [Phase 04-command-ux-and-migration-help]: Repo-local `.gitignore` updates remain authoritative and are mentioned only when init actually changed the file.
+- [Phase 04-command-ux-and-migration-help]: README documentation now leads with the default repo-local XDG path before describing the `home` alternative, doctor workflows, and precedence tables.
 
 ### Pending Todos
 
@@ -97,10 +101,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Phase 04 Plan 02 is the next ready execution target.
+- No current blockers; Phase 04 is ready for final verification and closure.
 
 ## Session Continuity
 
 Last session: 2026-04-07T02:54:05.043Z
-Stopped at: Completed 04-command-ux-and-migration-help-01-PLAN.md
+Stopped at: Completed 04-command-ux-and-migration-help-02-PLAN.md
 Resume file: None

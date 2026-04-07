@@ -68,7 +68,7 @@ Plans:
 
 Plans:
 - [x] 04-01-PLAN.md — Implement the `doctor` inspection and migration-prompt command workflow
-- [ ] 04-02-PLAN.md — Add init layout UX, explicit path reporting, and default-first operator docs
+- [x] 04-02-PLAN.md — Add init layout UX, explicit path reporting, and default-first operator docs
 
 ### Phase 5: Rollout Verification
 **Goal**: Make the new layout model the default-safe behavior and verify compatibility across existing and new layouts
@@ -94,5 +94,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Layout Proposal | 2/2 | Complete | 2026-04-06 |
 | 2. Resolution Core | 2/2 | Complete   | 2026-04-06 |
 | 3. Authority and Safety | 2/2 | Complete | 2026-04-07 |
-| 4. Command UX and Migration Help | 1/2 | In Progress | - |
+| 4. Command UX and Migration Help | 2/2 | In Progress | - |
 | 5. Rollout Verification | 0/2 | Not started | - |

@@ -34,30 +34,141 @@ behavior = "new"
 Any Markdown content goes here.
 ```
 
-## Repository-local layout
+## Layout and initialization
+
+The tool always resolves the target repository root from Git. If a command runs outside a Git repository, repo-scoped commands fail cleanly.
+
+### Default repo layout
+
+Plain `changes init` uses the repo-local `xdg` layout unless an approved higher-precedence default says otherwise.
 
 Committed:
 
 - `.config/changes/config.toml`
+- `.config/changes/layout.toml`
 - `.local/share/changes/fragments/`
 - `.local/share/changes/releases/`
 - `.local/share/changes/prompts/`
-- `.local/share/changes/templates/`
 
 Transient:
 
-- `.local/state/`
+- `.local/state/changes/`
 
-The tool always resolves the target repository root from Git. If a command runs outside a Git repository, it fails cleanly.
+Repo-local `xdg` init keeps `/.local/state/` ignored in `.gitignore`.
+
+Example:
+
+```bash
+changes init
+```
+
+### Repo `home` layout
+
+Use `home` when you want one repo-local root that contains config, data, and state.
+
+Committed:
+
+- `.changes/config/config.toml`
+- `.changes/config/layout.toml`
+- `.changes/data/fragments/`
+- `.changes/data/releases/`
+- `.changes/data/prompts/`
+
+Transient:
+
+- `.changes/state/`
+
+Repo-local `home` init keeps `/.changes/state/` ignored in `.gitignore`.
+
+Examples:
+
+```bash
+changes init --layout home
+changes init --layout home --home .changes
+```
+
+### Global layout
+
+Use global init when you want to establish global defaults and a global authoritative layout manifest.
+
+Global `xdg` uses the XDG config, data, and state directories for `changes`. Global `home` uses one root with `config`, `data`, and `state` subdirectories.
+
+Example:
+
+```bash
+changes init global --layout home --home ~/.changes
+```
+
+### Init command surface
+
+```text
+changes init [--current-version <semver|unreleased>] [--layout xdg|home] [--home PATH]
+changes init global [--layout xdg|home] [--home PATH]
+```
+
+`--home` is only valid with `--layout home`.
+
+Successful init reports the selected layout and the resolved config, data, and state paths. Repo init mentions `.gitignore` only when it actually added or updated the authoritative state-ignore entry.
+
+`changes init` can also bootstrap an already-released product:
+
+- `changes init --current-version unreleased` starts a new repository with no adoption release record
+- `changes init --current-version 0.0.0` is treated the same as `unreleased`
+- `changes init --current-version 2.7.4` creates a standard adoption release and fragment at `2.7.4`
+- when init creates an adoption release, it also generates the repo-local release-history import prompt as a starting point for an LLM-assisted historical import workflow
+- rerunning `init` after bootstrap adoption artifacts already exist fails and asks you to review or remove them intentionally
+
+### Layout selection precedence
+
+Global bootstrap precedence:
+
+| Order | Input |
+|---|---|
+| 1 | Explicit `changes init global` flags |
+| 2 | `CHANGES_HOME` |
+| 3 | XDG environment variables |
+| 4 | Built-in default locations |
+
+Repo init precedence:
+
+| Order | Input |
+|---|---|
+| 1 | Explicit `changes init` flags |
+| 2 | Global config `[repo.init]` defaults |
+| 3 | `CHANGES_HOME` as a repo-style preference signal |
+| 4 | XDG environment variables as a repo-style preference signal |
+| 5 | Built-in default locations |
+
+### Inspecting layout state
+
+Use `doctor` to inspect layout resolution, authority warnings, and migration guidance.
+
+```text
+changes doctor [--scope global|repo|all] [--explain] [--json]
+changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH] [--output PATH]
+```
+
+Canonical examples:
+
+```bash
+changes doctor --scope repo --explain
+changes doctor --scope global
+changes doctor --migration-prompt --scope repo --to home
+```
+
+By default, `changes doctor` inspects the repo scope when you are inside a repository. Use `--scope global` or `--scope all` when you need broader inspection. `--migration-prompt` prints the advisory Markdown brief to stdout unless you supply `--output PATH`.
 
 ## Current command surface
 
 ```text
-changes init [--current-version <semver|unreleased>]
+changes init [--current-version <semver|unreleased>] [--layout xdg|home] [--home PATH]
+changes init global [--layout xdg|home] [--home PATH]
 changes create --behavior fix "Fix release note rendering."
 changes create --public-api add --edit
 changes status
 changes status --explain
+changes doctor [--scope global|repo|all] [--explain] [--json]
+changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH] [--output PATH]
 changes release
 changes release --accept
 changes release --accept --pre rc
@@ -71,14 +182,6 @@ changes render profiles
 ```
 
 Interactive authoring prompts for optional `name` stem and body text when you run `create` in a TTY. Use `--edit` when the body needs richer Markdown than a single prompt line.
-
-`changes init` can also bootstrap an already-released product:
-
-- `changes init --current-version unreleased` starts a new repository with no adoption release record
-- `changes init --current-version 0.0.0` is treated the same as `unreleased`
-- `changes init --current-version 2.7.4` creates a standard adoption release and fragment at `2.7.4`
-- when init creates an adoption release, it also generates `.local/share/changes/prompts/release-history-import-llm-prompt.md` as a repo-specific starting point for an LLM-assisted historical import workflow
-- rerunning `init` after bootstrap adoption artifacts already exist fails and asks you to review or remove them intentionally
 
 ## Fragment vocabulary
 
@@ -188,7 +291,7 @@ That policy drives the tool's recommendation. `changes status --explain` and int
 - Single-release profiles render only the selected `ReleaseBundle`.
 - Chain-style profiles walk `parent_version` backward from the chosen base release record and render each assembled bundle in the lineage.
 - Multi-release trimming drops whole release blocks from the tail of the rendered chain. It never truncates inside an entry body.
-- Repo-local template files override the built-in profile templates without changing release-record semantics.
+- Repo-local template files, when present, override the built-in profile templates without changing release-record semantics.
 
 ## Further Reading
 

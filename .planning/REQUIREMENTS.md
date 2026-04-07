@@ -14,7 +14,7 @@
 ### Repository Layout Resolution
 
 - [x] **REPO-01**: `changes` can resolve repo-local config, data, and state paths from either the default repo-local XDG-style layout or a declared single-root repo-local layout
-- [ ] **REPO-02**: `changes init` can choose the repo-local layout style using a clean, documented command shape
+- [x] **REPO-02**: `changes init` can choose the repo-local layout style using a clean, documented command shape
 - [x] **REPO-03**: Repo-local layout selection rules are deterministic when no existing repo-local layout artifacts are present
 
 ### Ambiguity and Authority
@@ -37,7 +37,7 @@
 - [x] **CMD-03**: Documentation explains the defaults, precedence, and difference between global vs repo-local layout overrides
 - [x] **CMD-04**: `changes init` and `changes init global` expose clean, documented layout-selection flags
 - [x] **CMD-05**: Documentation includes proposal-quality examples before implementation details are finalized
-- [ ] **CMD-06**: Repo-local initialization updates `.gitignore` so the authoritative repo-local `state` directory is ignored consistently
+- [x] **CMD-06**: Repo-local initialization updates `.gitignore` so the authoritative repo-local `state` directory is ignored consistently
 
 ## v2 Requirements
 
@@ -63,7 +63,7 @@
 | GLBL-02 | Phase 2 | Complete |
 | GLBL-03 | Phase 4 | Complete |
 | REPO-01 | Phase 2 | Complete |
-| REPO-02 | Phase 4 | Pending |
+| REPO-02 | Phase 4 | Complete |
 | REPO-03 | Phase 2 | Complete |
 | AUTH-01 | Phase 3 | Complete |
 | AUTH-02 | Phase 3 | Complete |
@@ -77,7 +77,7 @@
 | CMD-03 | Phase 1 | Complete |
 | CMD-04 | Phase 1 | Complete |
 | CMD-05 | Phase 1 | Complete |
-| CMD-06 | Phase 4 | Pending |
+| CMD-06 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 19 total
@@ -86,4 +86,4 @@
 
 ---
 *Requirements defined: 2026-04-06*
-*Last updated: 2026-04-07 after Phase 04 Plan 01 completion*
+*Last updated: 2026-04-07 after Phase 04 Plan 02 completion*
