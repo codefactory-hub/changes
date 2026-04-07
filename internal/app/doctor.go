@@ -545,7 +545,7 @@ func buildDoctorMigrationPrompt(scope DoctorScope, scopeResult DoctorScopeResult
 	builder.WriteString("- Confirm the resulting layout.toml is present, parseable, and matches the destination scope/style.\n")
 	builder.WriteString("- Confirm only one authoritative layout remains after migration.\n")
 	if scope == DoctorScopeRepo {
-		ignoreRule := "/.local/state/"
+		ignoreRule := "/.local/state/changes/"
 		if destination.Style == string(config.StyleHome) {
 			ignoreRule = "/.changes/state/"
 			if strings.TrimSpace(destination.RequestedHome) != "" {

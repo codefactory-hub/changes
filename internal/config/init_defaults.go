@@ -78,7 +78,7 @@ func SelectRepoInitLayout(opts RepoInitSelectionOptions) (RepoInitSelection, err
 			Config:         paths.Config,
 			Data:           paths.Data,
 			State:          paths.State,
-			GitignoreEntry: repoStateGitignoreEntry(repoRoot, filepath.Dir(paths.State)),
+			GitignoreEntry: repoStateGitignoreEntry(repoRoot, paths.State),
 		}, nil
 	default:
 		return RepoInitSelection{}, fmt.Errorf("select repo init layout: unsupported style %q", style)

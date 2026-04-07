@@ -29,7 +29,7 @@ func TestSelectRepoInitLayoutDefaultsToXDG(t *testing.T) {
 	if selection.State != filepath.Join(repoRoot, ".local", "state", "changes") {
 		t.Fatalf("state = %q", selection.State)
 	}
-	if selection.GitignoreEntry != "/.local/state/" {
+	if selection.GitignoreEntry != "/.local/state/changes/" {
 		t.Fatalf("gitignore entry = %q", selection.GitignoreEntry)
 	}
 }
@@ -136,7 +136,7 @@ func TestSelectRepoInitLayoutExplicitFlagsBeatGlobalDefaultsAndEnvSignals(t *tes
 	if selection.Root != repoRoot {
 		t.Fatalf("root = %q, want %q", selection.Root, repoRoot)
 	}
-	if selection.GitignoreEntry != "/.local/state/" {
+	if selection.GitignoreEntry != "/.local/state/changes/" {
 		t.Fatalf("gitignore entry = %q", selection.GitignoreEntry)
 	}
 }

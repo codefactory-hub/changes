@@ -54,7 +54,7 @@ Transient:
 
 - `.local/state/changes/`
 
-Repo-local `xdg` init keeps `/.local/state/` ignored in `.gitignore`.
+Repo-local `xdg` init keeps `/.local/state/changes/` ignored in `.gitignore`.
 
 Canonical example:
 

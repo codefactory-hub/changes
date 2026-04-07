@@ -115,7 +115,7 @@ func TestInitializeHomeLayoutAddsStateGitignore(t *testing.T) {
 	if !strings.Contains(body, "/.changes/state/") {
 		t.Fatalf(".gitignore = %q, want home state entry", body)
 	}
-	if strings.Contains(body, "/.local/state/") {
+	if strings.Contains(body, "/.local/state/changes/") {
 		t.Fatalf(".gitignore = %q, should not include xdg state entry", body)
 	}
 }

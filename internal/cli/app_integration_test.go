@@ -42,7 +42,7 @@ func TestAppEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
 	}
-	if !strings.Contains(string(gitignore), "/.local/state/") {
+	if !strings.Contains(string(gitignore), "/.local/state/changes/") {
 		t.Fatalf(".gitignore missing state dir entry: %s", gitignore)
 	}
 

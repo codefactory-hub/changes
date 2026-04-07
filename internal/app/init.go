@@ -515,10 +515,9 @@ func candidateGitignoreEntry(candidate config.Candidate) string {
 	case config.StyleHome:
 		return "/.changes/state/"
 	default:
-		target := filepath.Dir(candidate.Paths.State)
-		rel, err := filepath.Rel(candidate.Paths.Root, target)
+		rel, err := filepath.Rel(candidate.Paths.Root, candidate.Paths.State)
 		if err != nil {
-			return "/.local/state/"
+			return "/.local/state/changes/"
 		}
 		return "/" + strings.Trim(filepath.ToSlash(rel), "/") + "/"
 	}

@@ -1,4 +1,4 @@
-/.local/state/
+/.local/state/changes/
 /.cache/
 /.cache/go/
 /.cache/go-build/
