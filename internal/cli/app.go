@@ -80,6 +80,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 }
 
 func (a *App) runInit(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == "global" {
+		return a.runInitGlobal(ctx, args[1:])
+	}
 	if wantsHelp(args) {
 		a.printHelp([]string{"init"})
 		return nil
@@ -88,9 +91,19 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var currentVersion string
+	var layout string
+	var home string
 	fs.StringVar(&currentVersion, "current-version", "", "Current released version or unreleased")
+	fs.StringVar(&layout, "layout", "", "Repo layout style")
+	fs.StringVar(&home, "home", "", "Repo home path for home layout")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("usage: changes init [--current-version <semver|unreleased>] [--layout xdg|home] [--home PATH]")
+	}
+	if strings.TrimSpace(home) != "" && strings.TrimSpace(layout) != "home" {
+		return fmt.Errorf("init: --home is only valid when --layout home")
 	}
 
 	if strings.TrimSpace(currentVersion) == "" && a.isTTY() {
@@ -107,10 +120,12 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 	}
 
 	result, err := appsvc.Initialize(ctx, appsvc.InitializeRequest{
-		RepoRoot:       repoRoot,
-		CurrentVersion: currentVersion,
-		Now:            a.Now().UTC().Truncate(time.Second),
-		Random:         a.Random,
+		RepoRoot:        repoRoot,
+		CurrentVersion:  currentVersion,
+		RequestedLayout: layout,
+		RequestedHome:   home,
+		Now:             a.Now().UTC().Truncate(time.Second),
+		Random:          a.Random,
 	})
 	if err != nil {
 		return err
@@ -118,9 +133,55 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 	a.printAuthorityWarnings(repoRoot, result.AuthorityWarnings)
 
 	_, _ = fmt.Fprintf(a.Stdout, "initialized %s\n", result.RepoRoot)
+	_, _ = fmt.Fprintf(a.Stdout, "layout: %s\n", result.SelectedLayout)
+	_, _ = fmt.Fprintf(a.Stdout, "config: %s\n", repoRelativePath(result.RepoRoot, result.ConfigPath))
+	_, _ = fmt.Fprintf(a.Stdout, "data: %s\n", repoRelativePath(result.RepoRoot, result.DataPath))
+	_, _ = fmt.Fprintf(a.Stdout, "state: %s\n", repoRelativePath(result.RepoRoot, result.StatePath))
+	if result.GitignoreUpdated {
+		_, _ = fmt.Fprintln(a.Stdout, "updated .gitignore")
+	}
 	if strings.TrimSpace(result.PromptPath) != "" {
 		_, _ = fmt.Fprintf(a.Stdout, "next step: review %s to replace or refine the standard adoption history.\n", repoRelativePath(result.RepoRoot, result.PromptPath))
 	}
+	return nil
+}
+
+func (a *App) runInitGlobal(ctx context.Context, args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"init", "global"})
+		return nil
+	}
+
+	fs := flag.NewFlagSet("init global", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var layout string
+	var home string
+	fs.StringVar(&layout, "layout", "", "Global layout style")
+	fs.StringVar(&home, "home", "", "Global home path for home layout")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("usage: changes init global [--layout xdg|home] [--home PATH]")
+	}
+	if strings.TrimSpace(home) != "" && strings.TrimSpace(layout) != "home" {
+		return fmt.Errorf("init global: --home is only valid when --layout home")
+	}
+
+	result, err := appsvc.InitializeGlobal(ctx, appsvc.InitializeGlobalRequest{
+		RequestedLayout: layout,
+		RequestedHome:   home,
+		Now:             a.Now().UTC().Truncate(time.Second),
+	})
+	if err != nil {
+		return err
+	}
+	a.printAuthorityWarnings("", result.AuthorityWarnings)
+
+	_, _ = fmt.Fprintf(a.Stdout, "initialized global %s\n", result.SelectedLayout)
+	_, _ = fmt.Fprintf(a.Stdout, "config: %s\n", result.ConfigPath)
+	_, _ = fmt.Fprintf(a.Stdout, "data: %s\n", result.DataPath)
+	_, _ = fmt.Fprintf(a.Stdout, "state: %s\n", result.StatePath)
 	return nil
 }
 
@@ -601,9 +662,16 @@ Use "changes help <command>" or "changes <command> --help" for details.
 	case "init":
 		body = strings.TrimSpace(`
 Usage:
-  changes init [--current-version <semver|unreleased>]
+  changes init [--current-version <semver|unreleased>] [--layout xdg|home] [--home PATH]
 
 Initialize repo-local config, changelog, prompts, and state directories.
+`)
+	case "init global":
+		body = strings.TrimSpace(`
+Usage:
+  changes init global [--layout xdg|home] [--home PATH]
+
+Initialize global config, data, and state directories plus the layout manifest.
 `)
 	case "create":
 		body = strings.TrimSpace(`

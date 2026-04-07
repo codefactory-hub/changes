@@ -28,10 +28,29 @@ type InitializeRequest struct {
 
 type InitializeResult struct {
 	RepoRoot          string
+	SelectedLayout    config.Style
+	ConfigPath        string
+	DataPath          string
+	StatePath         string
+	GitignoreUpdated  bool
 	AuthorityWarnings []config.AuthorityWarning
 	AdoptionFragment  *fragments.Fragment
 	AdoptionRecord    *releases.ReleaseRecord
 	PromptPath        string
+}
+
+type InitializeGlobalRequest struct {
+	RequestedLayout string
+	RequestedHome   string
+	Now             time.Time
+}
+
+type InitializeGlobalResult struct {
+	SelectedLayout    config.Style
+	ConfigPath        string
+	DataPath          string
+	StatePath         string
+	AuthorityWarnings []config.AuthorityWarning
 }
 
 type StatusRequest struct {

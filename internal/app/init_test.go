@@ -18,7 +18,6 @@ func TestInitializeReturnsSelectedLayoutAndPaths(t *testing.T) {
 	result, err := Initialize(context.Background(), InitializeRequest{
 		RepoRoot:        repoRoot,
 		RequestedLayout: "home",
-		RequestedHome:   ".changes-alt",
 		Now:             time.Date(2026, 4, 7, 3, 0, 0, 0, time.UTC),
 		Random:          bytes.NewReader([]byte{1, 2, 3, 4}),
 	})
@@ -29,13 +28,13 @@ func TestInitializeReturnsSelectedLayoutAndPaths(t *testing.T) {
 	if result.SelectedLayout != config.StyleHome {
 		t.Fatalf("SelectedLayout = %q, want %q", result.SelectedLayout, config.StyleHome)
 	}
-	if result.ConfigPath != filepath.Join(repoRoot, ".changes-alt", "config") {
+	if result.ConfigPath != filepath.Join(repoRoot, ".changes", "config") {
 		t.Fatalf("ConfigPath = %q", result.ConfigPath)
 	}
-	if result.DataPath != filepath.Join(repoRoot, ".changes-alt", "data") {
+	if result.DataPath != filepath.Join(repoRoot, ".changes", "data") {
 		t.Fatalf("DataPath = %q", result.DataPath)
 	}
-	if result.StatePath != filepath.Join(repoRoot, ".changes-alt", "state") {
+	if result.StatePath != filepath.Join(repoRoot, ".changes", "state") {
 		t.Fatalf("StatePath = %q", result.StatePath)
 	}
 }
@@ -83,7 +82,7 @@ func TestInitializeReportsGitignoreChangeOnlyWhenModified(t *testing.T) {
 }
 
 func TestInitializeGlobalCreatesSelectedLayout(t *testing.T) {
-	homeDir, _, xdgConfigHome, xdgDataHome, xdgStateHome := configureGlobalLayoutEnv(t)
+	_, _, xdgConfigHome, xdgDataHome, xdgStateHome := configureGlobalLayoutEnv(t)
 
 	xdgResult, err := InitializeGlobal(context.Background(), InitializeGlobalRequest{
 		RequestedLayout: "xdg",
@@ -105,6 +104,7 @@ func TestInitializeGlobalCreatesSelectedLayout(t *testing.T) {
 		}
 	}
 
+	homeDir, _, _, _, _ := configureGlobalLayoutEnv(t)
 	customHome := filepath.Join(homeDir, ".changes-global")
 	homeResult, err := InitializeGlobal(context.Background(), InitializeGlobalRequest{
 		RequestedLayout: "home",

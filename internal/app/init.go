@@ -47,6 +47,59 @@ func Initialize(ctx context.Context, req InitializeRequest) (InitializeResult, e
 	return initializeWithDeps(ctx, req, deps)
 }
 
+func InitializeGlobal(ctx context.Context, req InitializeGlobalRequest) (result InitializeGlobalResult, err error) {
+	if err := checkContext(ctx); err != nil {
+		return InitializeGlobalResult{}, err
+	}
+
+	selection, warnings, err := selectGlobalInitializeLayout(req)
+	if err != nil {
+		return InitializeGlobalResult{}, err
+	}
+
+	tx := newInitTxn()
+	defer func() {
+		if err != nil {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				err = fmt.Errorf("%w; rollback failed: %v", err, rollbackErr)
+			}
+		}
+	}()
+
+	if err := tx.MkdirAll(selection.Config, 0o755); err != nil {
+		return InitializeGlobalResult{}, fmt.Errorf("create global config directory: %w", err)
+	}
+	for _, dir := range []string{selection.Data, selection.State} {
+		if err := tx.MkdirAll(dir, 0o755); err != nil {
+			return InitializeGlobalResult{}, fmt.Errorf("create directory %s: %w", dir, err)
+		}
+	}
+	if err := checkContext(ctx); err != nil {
+		return InitializeGlobalResult{}, err
+	}
+
+	layoutManifestPath := filepath.Join(selection.Config, "layout.toml")
+	if _, statErr := os.Stat(layoutManifestPath); os.IsNotExist(statErr) {
+		raw, encodeErr := encodeTOML(globalLayoutManifest(selection))
+		if encodeErr != nil {
+			return InitializeGlobalResult{}, encodeErr
+		}
+		if err := tx.WriteFileExclusive(layoutManifestPath, raw, 0o644); err != nil {
+			return InitializeGlobalResult{}, fmt.Errorf("write global layout manifest: %w", err)
+		}
+	} else if statErr != nil {
+		return InitializeGlobalResult{}, fmt.Errorf("stat global layout manifest: %w", statErr)
+	}
+
+	return InitializeGlobalResult{
+		SelectedLayout:    selection.Style,
+		ConfigPath:        selection.Config,
+		DataPath:          selection.Data,
+		StatePath:         selection.State,
+		AuthorityWarnings: append([]config.AuthorityWarning(nil), warnings...),
+	}, nil
+}
+
 func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initializeDeps) (result InitializeResult, err error) {
 	if err := checkContext(ctx); err != nil {
 		return InitializeResult{}, err
@@ -139,7 +192,8 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 		return InitializeResult{}, fmt.Errorf("write starter changelog: %w", err)
 	}
 
-	if err := ensureGitignoreWithTx(tx, req.RepoRoot, selection.GitignoreEntry); err != nil {
+	gitignoreUpdated, err := ensureGitignoreWithTx(tx, req.RepoRoot, selection.GitignoreEntry)
+	if err != nil {
 		return InitializeResult{}, err
 	}
 	if deps.stageHook != nil {
@@ -158,6 +212,11 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 
 	result = InitializeResult{
 		RepoRoot:          req.RepoRoot,
+		SelectedLayout:    selection.Style,
+		ConfigPath:        selection.Config,
+		DataPath:          selection.Data,
+		StatePath:         selection.State,
+		GitignoreUpdated:  gitignoreUpdated,
 		AuthorityWarnings: append([]config.AuthorityWarning(nil), authorityWarnings...),
 	}
 	if currentVersion != nil && releases.LatestFinalHeadForProduct(records, cfg.Project.Name) == nil {
@@ -349,18 +408,18 @@ func ensureBootstrapArtifactsAbsent(repoRoot string, cfg config.Config) error {
 	return fmt.Errorf("init: bootstrap adoption artifacts already exist; review or remove them intentionally before re-running init: %s", strings.Join(paths, ", "))
 }
 
-func ensureGitignoreWithTx(tx *initTxn, repoRoot, entry string) error {
+func ensureGitignoreWithTx(tx *initTxn, repoRoot, entry string) (bool, error) {
 	path := filepath.Join(repoRoot, ".gitignore")
 
 	raw, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read .gitignore: %w", err)
+		return false, fmt.Errorf("read .gitignore: %w", err)
 	}
 
 	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
 	for _, line := range lines {
 		if strings.TrimSpace(line) == entry {
-			return nil
+			return false, nil
 		}
 	}
 
@@ -370,9 +429,9 @@ func ensureGitignoreWithTx(tx *initTxn, repoRoot, entry string) error {
 	lines = append(lines, entry)
 	body := strings.Join(lines, "\n") + "\n"
 	if err := tx.WriteFile(path, []byte(body), 0o644); err != nil {
-		return fmt.Errorf("write .gitignore: %w", err)
+		return false, fmt.Errorf("write .gitignore: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
 type repoInitDefaultsDoc struct {
@@ -441,17 +500,82 @@ func selectInitializeLayout(req InitializeRequest) (config.RepoInitSelection, bo
 }
 
 func selectionFromCandidate(candidate config.Candidate) config.RepoInitSelection {
-	gitignoreEntry := "/.local/state/"
-	if candidate.Style == config.StyleHome {
-		gitignoreEntry = "/.changes/state/"
-	}
 	return config.RepoInitSelection{
 		Style:          candidate.Style,
 		Root:           candidate.Paths.Root,
 		Config:         candidate.Paths.Config,
 		Data:           candidate.Paths.Data,
 		State:          candidate.Paths.State,
-		GitignoreEntry: gitignoreEntry,
+		GitignoreEntry: candidateGitignoreEntry(candidate),
+	}
+}
+
+func candidateGitignoreEntry(candidate config.Candidate) string {
+	switch candidate.Style {
+	case config.StyleHome:
+		return "/.changes/state/"
+	default:
+		target := filepath.Dir(candidate.Paths.State)
+		rel, err := filepath.Rel(candidate.Paths.Root, target)
+		if err != nil {
+			return "/.local/state/"
+		}
+		return "/" + strings.Trim(filepath.ToSlash(rel), "/") + "/"
+	}
+}
+
+func selectGlobalInitializeLayout(req InitializeGlobalRequest) (config.GlobalInitSelection, []config.AuthorityWarning, error) {
+	homeDir, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		homeDir = ""
+	}
+
+	resolution, err := config.ResolveGlobal(config.ResolveOptions{
+		HomeDir:       homeDir,
+		ChangesHome:   os.Getenv("CHANGES_HOME"),
+		XDGConfigHome: os.Getenv("XDG_CONFIG_HOME"),
+		XDGDataHome:   os.Getenv("XDG_DATA_HOME"),
+		XDGStateHome:  os.Getenv("XDG_STATE_HOME"),
+	})
+	if err != nil {
+		return config.GlobalInitSelection{}, nil, fmt.Errorf("init global: resolve global layout: %w", err)
+	}
+
+	check, err := config.CheckScopeAuthority(resolution)
+	if err == nil {
+		return selectionFromGlobalCandidate(*check.Authoritative), append([]config.AuthorityWarning(nil), check.Warnings...), nil
+	}
+
+	var authorityErr *config.AuthorityError
+	if !errors.As(err, &authorityErr) {
+		return config.GlobalInitSelection{}, nil, err
+	}
+	if authorityErr.Status != config.StatusUninitialized {
+		return config.GlobalInitSelection{}, nil, err
+	}
+
+	selection, err := config.SelectGlobalInitLayout(config.GlobalInitSelectionOptions{
+		HomeDir:        homeDir,
+		RequestedStyle: req.RequestedLayout,
+		RequestedHome:  req.RequestedHome,
+		ChangesHome:    os.Getenv("CHANGES_HOME"),
+		XDGConfigHome:  os.Getenv("XDG_CONFIG_HOME"),
+		XDGDataHome:    os.Getenv("XDG_DATA_HOME"),
+		XDGStateHome:   os.Getenv("XDG_STATE_HOME"),
+	})
+	if err != nil {
+		return config.GlobalInitSelection{}, nil, err
+	}
+	return selection, nil, nil
+}
+
+func selectionFromGlobalCandidate(candidate config.Candidate) config.GlobalInitSelection {
+	return config.GlobalInitSelection{
+		Style:  candidate.Style,
+		Root:   candidate.Paths.Root,
+		Config: candidate.Paths.Config,
+		Data:   candidate.Paths.Data,
+		State:  candidate.Paths.State,
 	}
 }
 
@@ -516,12 +640,78 @@ func repoLayoutManifest(selection config.RepoInitSelection, repoRoot string) lay
 	return doc
 }
 
+func globalLayoutManifest(selection config.GlobalInitSelection) layoutManifestDoc {
+	doc := layoutManifestDoc{
+		SchemaVersion: 1,
+		Scope:         string(config.ScopeGlobal),
+		Style:         string(selection.Style),
+	}
+
+	switch selection.Style {
+	case config.StyleHome:
+		doc.Layout.Root = globalHomeSymbolicRoot(selection.Root)
+		doc.Layout.Config = "$layout.root/config"
+		doc.Layout.Data = "$layout.root/data"
+		doc.Layout.State = "$layout.root/state"
+	default:
+		doc.Layout.Root = "$HOME"
+		doc.Layout.Config = globalXDGSymbolicPath(selection.Config, "XDG_CONFIG_HOME", os.Getenv("XDG_CONFIG_HOME"), ".config", "changes")
+		doc.Layout.Data = globalXDGSymbolicPath(selection.Data, "XDG_DATA_HOME", os.Getenv("XDG_DATA_HOME"), ".local", "share", "changes")
+		doc.Layout.State = globalXDGSymbolicPath(selection.State, "XDG_STATE_HOME", os.Getenv("XDG_STATE_HOME"), ".local", "state", "changes")
+	}
+
+	return doc
+}
+
 func repoSymbolicPath(repoRoot, absolute string) string {
 	rel, err := filepath.Rel(repoRoot, absolute)
 	if err != nil || rel == "." {
 		return "$REPO_ROOT"
 	}
 	return "$REPO_ROOT/" + filepath.ToSlash(rel)
+}
+
+func globalHomeSymbolicRoot(root string) string {
+	changesHome := strings.TrimSpace(os.Getenv("CHANGES_HOME"))
+	if changesHome != "" && filepath.Clean(changesHome) == filepath.Clean(root) {
+		return "$CHANGES_HOME"
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err == nil && strings.TrimSpace(homeDir) != "" {
+		if rel, relErr := filepath.Rel(homeDir, root); relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			if rel == "." {
+				return "$HOME"
+			}
+			return "$HOME/" + filepath.ToSlash(rel)
+		}
+	}
+
+	return filepath.ToSlash(root)
+}
+
+func globalXDGSymbolicPath(path string, envName string, envValue string, fallback ...string) string {
+	clean := filepath.Clean(path)
+	envValue = strings.TrimSpace(envValue)
+	if envValue != "" {
+		prefix := filepath.Clean(envValue)
+		if rel, err := filepath.Rel(prefix, clean); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			if rel == "." {
+				return "$" + envName
+			}
+			return "$" + envName + "/" + filepath.ToSlash(rel)
+		}
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err == nil && strings.TrimSpace(homeDir) != "" {
+		defaultPath := filepath.Join(append([]string{homeDir}, fallback...)...)
+		if filepath.Clean(defaultPath) == clean {
+			return "$HOME/" + filepath.ToSlash(filepath.Join(fallback...))
+		}
+	}
+
+	return filepath.ToSlash(clean)
 }
 
 func encodeTOML(v any) ([]byte, error) {
