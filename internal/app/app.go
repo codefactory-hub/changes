@@ -2,9 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -28,6 +28,7 @@ type InitializeRequest struct {
 
 type InitializeResult struct {
 	RepoRoot         string
+	AuthorityWarnings []config.AuthorityWarning
 	AdoptionFragment *fragments.Fragment
 	AdoptionRecord   *releases.ReleaseRecord
 	PromptPath       string
@@ -39,6 +40,7 @@ type StatusRequest struct {
 
 type StatusResult struct {
 	RepoRoot             string
+	AuthorityWarnings    []config.AuthorityWarning
 	Config               config.Config
 	CurrentVersionLabel  string
 	CurrentVersionSource string
@@ -59,6 +61,7 @@ type ReleasePlanRequest struct {
 
 type ReleasePlan struct {
 	RepoRoot          string
+	AuthorityWarnings []config.AuthorityWarning
 	Product           string
 	PendingFragments  []fragments.Fragment
 	Recommendation    semverpolicy.Recommendation
@@ -85,18 +88,19 @@ type RenderRequest struct {
 }
 
 type RenderResult struct {
-	RepoRoot string
-	Config   config.Config
-	Record   releases.ReleaseRecord
-	Document render.Document
-	Content  string
+	RepoRoot          string
+	AuthorityWarnings []config.AuthorityWarning
+	Config            config.Config
+	Record            releases.ReleaseRecord
+	Document          render.Document
+	Content           string
 }
 
 func Status(ctx context.Context, req StatusRequest) (StatusResult, error) {
 	if err := checkContext(ctx); err != nil {
 		return StatusResult{}, err
 	}
-	cfg, err := config.Load(req.RepoRoot)
+	cfg, authorityCheck, err := config.LoadWithAuthority(req.RepoRoot)
 	if err != nil {
 		return StatusResult{}, err
 	}
@@ -125,6 +129,7 @@ func Status(ctx context.Context, req StatusRequest) (StatusResult, error) {
 
 	return StatusResult{
 		RepoRoot:             req.RepoRoot,
+		AuthorityWarnings:    append([]config.AuthorityWarning(nil), authorityCheck.Warnings...),
 		Config:               cfg,
 		CurrentVersionLabel:  currentLabel,
 		CurrentVersionSource: source,
@@ -140,7 +145,7 @@ func PlanRelease(ctx context.Context, req ReleasePlanRequest) (ReleasePlan, erro
 	if err := checkContext(ctx); err != nil {
 		return ReleasePlan{}, err
 	}
-	cfg, err := config.Load(req.RepoRoot)
+	cfg, authorityCheck, err := config.LoadWithAuthority(req.RepoRoot)
 	if err != nil {
 		return ReleasePlan{}, err
 	}
@@ -169,6 +174,7 @@ func PlanRelease(ctx context.Context, req ReleasePlanRequest) (ReleasePlan, erro
 
 	return ReleasePlan{
 		RepoRoot:          req.RepoRoot,
+		AuthorityWarnings: append([]config.AuthorityWarning(nil), authorityCheck.Warnings...),
 		Product:           product,
 		PendingFragments:  pending,
 		Recommendation:    recommendation,
@@ -189,7 +195,7 @@ func CommitRelease(ctx context.Context, plan ReleasePlan) (CommitReleaseResult, 
 }
 
 func commitReleaseWithTimestamp(plan ReleasePlan, createdAt time.Time) (CommitReleaseResult, error) {
-	currentCfg, err := config.Load(plan.RepoRoot)
+	currentCfg, _, err := config.LoadWithAuthority(plan.RepoRoot)
 	if err != nil {
 		return CommitReleaseResult{}, err
 	}
@@ -223,6 +229,9 @@ func commitReleaseWithTimestamp(plan ReleasePlan, createdAt time.Time) (CommitRe
 	if err := releases.ValidateSet(append(cloneRecords(currentRecords), record)); err != nil {
 		return CommitReleaseResult{}, err
 	}
+	if _, err := config.RequireRepoWriteAuthority(plan.RepoRoot); err != nil {
+		return CommitReleaseResult{}, err
+	}
 
 	path, err := releases.Write(plan.RepoRoot, currentCfg, record)
 	if err != nil {
@@ -236,7 +245,7 @@ func Render(ctx context.Context, req RenderRequest) (RenderResult, error) {
 	if err := checkContext(ctx); err != nil {
 		return RenderResult{}, err
 	}
-	cfg, err := config.Load(req.RepoRoot)
+	cfg, authorityCheck, err := config.LoadWithAuthority(req.RepoRoot)
 	if err != nil {
 		return RenderResult{}, err
 	}
@@ -302,11 +311,12 @@ func Render(ctx context.Context, req RenderRequest) (RenderResult, error) {
 	}
 
 	return RenderResult{
-		RepoRoot: req.RepoRoot,
-		Config:   cfg,
-		Record:   record,
-		Document: doc,
-		Content:  content,
+		RepoRoot:          req.RepoRoot,
+		AuthorityWarnings: append([]config.AuthorityWarning(nil), authorityCheck.Warnings...),
+		Config:            cfg,
+		Record:            record,
+		Document:          doc,
+		Content:           content,
 	}, nil
 }
 
@@ -323,12 +333,24 @@ func loadState(repoRoot string, cfg config.Config) ([]fragments.Fragment, []rele
 }
 
 func loadExistingOrDefaultConfig(repoRoot string) (config.Config, error) {
-	if _, err := os.Stat(config.RepoConfigPath(repoRoot)); err == nil {
-		return config.Load(repoRoot)
-	} else if err != nil && !os.IsNotExist(err) {
-		return config.Config{}, fmt.Errorf("stat config: %w", err)
+	resolution, err := config.ResolveRepo(config.ResolveOptions{RepoRoot: repoRoot})
+	if err != nil {
+		return config.Config{}, fmt.Errorf("resolve repo layout: %w", err)
 	}
-	return config.Default(), nil
+
+	if _, err := config.CheckScopeAuthority(resolution); err != nil {
+		var authorityErr *config.AuthorityError
+		if errors.As(err, &authorityErr) && authorityErr.Status == config.StatusUninitialized {
+			return config.Default(), nil
+		}
+		return config.Config{}, err
+	}
+
+	cfg, _, err := config.LoadWithAuthority(repoRoot)
+	if err != nil {
+		return config.Config{}, err
+	}
+	return cfg, nil
 }
 
 func recommendationPolicy(cfg config.Config, pending []fragments.Fragment) semverpolicy.Recommendation {

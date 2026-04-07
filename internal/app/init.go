@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -50,11 +51,11 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 	if err := checkContext(ctx); err != nil {
 		return InitializeResult{}, err
 	}
-	cfg, err := loadExistingOrDefaultConfig(req.RepoRoot)
+	selection, selectionFromDefaults, authorityWarnings, err := selectInitializeLayout(req)
 	if err != nil {
 		return InitializeResult{}, err
 	}
-	selection, selectionFromDefaults, err := selectInitializeLayout(req)
+	cfg, err := loadExistingOrDefaultConfig(req.RepoRoot)
 	if err != nil {
 		return InitializeResult{}, err
 	}
@@ -155,7 +156,10 @@ func initializeWithDeps(ctx context.Context, req InitializeRequest, deps initial
 		return InitializeResult{}, err
 	}
 
-	result = InitializeResult{RepoRoot: req.RepoRoot}
+	result = InitializeResult{
+		RepoRoot:          req.RepoRoot,
+		AuthorityWarnings: append([]config.AuthorityWarning(nil), authorityWarnings...),
+	}
 	if currentVersion != nil && releases.LatestFinalHeadForProduct(records, cfg.Project.Name) == nil {
 		fragment, record, recordPath, err := deps.createAdoptionBootstrap(req.RepoRoot, cfg, *currentVersion, records, req.Now, req.Random)
 		if err != nil {
@@ -392,47 +396,48 @@ type layoutManifestDoc struct {
 	} `toml:"layout"`
 }
 
-func selectInitializeLayout(req InitializeRequest) (config.RepoInitSelection, bool, error) {
+func selectInitializeLayout(req InitializeRequest) (config.RepoInitSelection, bool, []config.AuthorityWarning, error) {
 	resolution, err := config.ResolveRepo(config.ResolveOptions{RepoRoot: req.RepoRoot})
 	if err != nil {
-		return config.RepoInitSelection{}, false, fmt.Errorf("init: resolve repo layout: %w", err)
+		return config.RepoInitSelection{}, false, nil, fmt.Errorf("init: resolve repo layout: %w", err)
 	}
 
-	switch resolution.Status {
-	case config.StatusResolved:
-		if resolution.Authoritative == nil {
-			return config.RepoInitSelection{}, false, fmt.Errorf("init: repo layout status %s has no authoritative candidate", resolution.Status)
-		}
-		return selectionFromCandidate(*resolution.Authoritative), false, nil
-	case config.StatusUninitialized:
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			homeDir = ""
-		}
-		globalStyle, globalHome, err := loadGlobalRepoInitDefaults(homeDir)
-		if err != nil {
-			return config.RepoInitSelection{}, false, err
-		}
-		selection, err := config.SelectRepoInitLayout(config.RepoInitSelectionOptions{
-			RepoRoot:        req.RepoRoot,
-			RequestedStyle:  req.RequestedLayout,
-			RequestedHome:   req.RequestedHome,
-			GlobalInitStyle: globalStyle,
-			GlobalInitHome:  globalHome,
-			ChangesHome:     os.Getenv("CHANGES_HOME"),
-			XDGConfigHome:   os.Getenv("XDG_CONFIG_HOME"),
-			XDGDataHome:     os.Getenv("XDG_DATA_HOME"),
-			XDGStateHome:    os.Getenv("XDG_STATE_HOME"),
-		})
-		if err != nil {
-			return config.RepoInitSelection{}, false, err
-		}
-		return selection, true, nil
-	case config.StatusLegacyOnly, config.StatusAmbiguous, config.StatusInvalid:
-		return config.RepoInitSelection{}, false, fmt.Errorf("init: repo layout status %s must be resolved before initialization", resolution.Status)
-	default:
-		return config.RepoInitSelection{}, false, fmt.Errorf("init: repo layout status %s is not supported", resolution.Status)
+	check, err := config.CheckScopeAuthority(resolution)
+	if err == nil {
+		return selectionFromCandidate(*check.Authoritative), false, append([]config.AuthorityWarning(nil), check.Warnings...), nil
 	}
+
+	var authorityErr *config.AuthorityError
+	if !errors.As(err, &authorityErr) {
+		return config.RepoInitSelection{}, false, nil, err
+	}
+	if authorityErr.Status != config.StatusUninitialized {
+		return config.RepoInitSelection{}, false, nil, err
+	}
+
+	homeDir, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		homeDir = ""
+	}
+	globalStyle, globalHome, globalWarnings, err := loadGlobalRepoInitDefaults(homeDir)
+	if err != nil {
+		return config.RepoInitSelection{}, false, nil, err
+	}
+	selection, err := config.SelectRepoInitLayout(config.RepoInitSelectionOptions{
+		RepoRoot:        req.RepoRoot,
+		RequestedStyle:  req.RequestedLayout,
+		RequestedHome:   req.RequestedHome,
+		GlobalInitStyle: globalStyle,
+		GlobalInitHome:  globalHome,
+		ChangesHome:     os.Getenv("CHANGES_HOME"),
+		XDGConfigHome:   os.Getenv("XDG_CONFIG_HOME"),
+		XDGDataHome:     os.Getenv("XDG_DATA_HOME"),
+		XDGStateHome:    os.Getenv("XDG_STATE_HOME"),
+	})
+	if err != nil {
+		return config.RepoInitSelection{}, false, nil, err
+	}
+	return selection, true, globalWarnings, nil
 }
 
 func selectionFromCandidate(candidate config.Candidate) config.RepoInitSelection {
@@ -450,7 +455,7 @@ func selectionFromCandidate(candidate config.Candidate) config.RepoInitSelection
 	}
 }
 
-func loadGlobalRepoInitDefaults(homeDir string) (string, string, error) {
+func loadGlobalRepoInitDefaults(homeDir string) (string, string, []config.AuthorityWarning, error) {
 	opts := config.ResolveOptions{
 		HomeDir:       homeDir,
 		ChangesHome:   os.Getenv("CHANGES_HOME"),
@@ -460,26 +465,32 @@ func loadGlobalRepoInitDefaults(homeDir string) (string, string, error) {
 	}
 	resolution, err := config.ResolveGlobal(opts)
 	if err != nil {
-		return "", "", fmt.Errorf("init: resolve global config: %w", err)
-	}
-	if resolution.Status != config.StatusResolved || resolution.Authoritative == nil {
-		return "", "", nil
+		return "", "", nil, fmt.Errorf("init: resolve global config: %w", err)
 	}
 
-	path := filepath.Join(resolution.Authoritative.Paths.Config, "config.toml")
+	check, err := config.CheckScopeAuthority(resolution)
+	if err != nil {
+		var authorityErr *config.AuthorityError
+		if errors.As(err, &authorityErr) && authorityErr.Status == config.StatusUninitialized {
+			return "", "", nil, nil
+		}
+		return "", "", nil, err
+	}
+
+	path := filepath.Join(check.Authoritative.Paths.Config, "config.toml")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", "", nil
+			return "", "", append([]config.AuthorityWarning(nil), check.Warnings...), nil
 		}
-		return "", "", fmt.Errorf("init: read global config: %w", err)
+		return "", "", nil, fmt.Errorf("init: read global config: %w", err)
 	}
 
 	var doc repoInitDefaultsDoc
 	if _, err := toml.Decode(string(raw), &doc); err != nil {
-		return "", "", fmt.Errorf("init: decode global config repo.init defaults: %w", err)
+		return "", "", nil, fmt.Errorf("init: decode global config repo.init defaults: %w", err)
 	}
-	return doc.Repo.Init.Style, doc.Repo.Init.Home, nil
+	return doc.Repo.Init.Style, doc.Repo.Init.Home, append([]config.AuthorityWarning(nil), check.Warnings...), nil
 }
 
 func repoLayoutManifest(selection config.RepoInitSelection, repoRoot string) layoutManifestDoc {
