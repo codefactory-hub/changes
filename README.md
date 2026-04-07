@@ -56,7 +56,7 @@ Transient:
 
 Repo-local `xdg` init keeps `/.local/state/` ignored in `.gitignore`.
 
-Example:
+Canonical example:
 
 ```bash
 changes init
@@ -80,28 +80,28 @@ Transient:
 
 Repo-local `home` init keeps `/.changes/state/` ignored in `.gitignore`.
 
-Examples:
+Canonical example:
 
 ```bash
 changes init --layout home
-changes init --layout home --home .changes
 ```
 
 ### Global layout
 
-Use global init when you want to establish global defaults and a global authoritative layout manifest.
+Plain `changes init global` creates the global `xdg` layout unless flags or `CHANGES_HOME` select the `home` variant instead.
 
-Global `xdg` uses the XDG config, data, and state directories for `changes`. Global `home` uses one root with `config`, `data`, and `state` subdirectories.
+Use global init when you want to establish global defaults and a global authoritative layout manifest. Global `xdg` uses the XDG config, data, and state directories for `changes`. Global `home` uses one root with `config`, `data`, and `state` subdirectories.
 
-Example:
+Canonical example:
 
 ```bash
-changes init global --layout home --home ~/.changes
+changes init global --layout home
 ```
 
 ### Init command surface
 
 ```text
+changes init [--layout xdg|home] [--home PATH]
 changes init [--current-version <semver|unreleased>] [--layout xdg|home] [--home PATH]
 changes init global [--layout xdg|home] [--home PATH]
 ```
@@ -120,24 +120,10 @@ Successful init reports the selected layout and the resolved config, data, and s
 
 ### Layout selection precedence
 
-Global bootstrap precedence:
-
-| Order | Input |
+| Workflow | Selection order |
 |---|---|
-| 1 | Explicit `changes init global` flags |
-| 2 | `CHANGES_HOME` |
-| 3 | XDG environment variables |
-| 4 | Built-in default locations |
-
-Repo init precedence:
-
-| Order | Input |
-|---|---|
-| 1 | Explicit `changes init` flags |
-| 2 | Global config `[repo.init]` defaults |
-| 3 | `CHANGES_HOME` as a repo-style preference signal |
-| 4 | XDG environment variables as a repo-style preference signal |
-| 5 | Built-in default locations |
+| Global bootstrap | Explicit `changes init global` flags > `CHANGES_HOME` > XDG environment variables > built-in default locations |
+| Repo initialization | Explicit `changes init` flags > global config `[repo.init]` defaults > `CHANGES_HOME` as a repo-style preference signal > XDG environment variables as a repo-style preference signal > built-in default locations |
 
 ### Inspecting layout state
 
@@ -151,6 +137,9 @@ changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH
 Canonical examples:
 
 ```bash
+changes init
+changes init --layout home
+changes init global --layout home
 changes doctor --scope repo --explain
 changes doctor --scope global
 changes doctor --migration-prompt --scope repo --to home
