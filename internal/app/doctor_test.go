@@ -279,6 +279,98 @@ func TestDoctorMigrationPromptIncludesConflictNotesAndVerification(t *testing.T)
 	}
 }
 
+func TestDoctorInspectsLegacyRepoWithoutManifest(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := writeLegacyRepoConfigForStyle(t, repoRoot, config.StyleXDG, config.Default()); err != nil {
+		t.Fatalf("write legacy xdg repo config: %v", err)
+	}
+
+	result, err := Doctor(context.Background(), DoctorRequest{
+		RepoRoot: repoRoot,
+		Scope:    DoctorScopeRepo,
+	})
+	if err != nil {
+		t.Fatalf("Doctor returned error: %v", err)
+	}
+
+	if result.Repo == nil {
+		t.Fatalf("repo scope result is nil")
+	}
+	if result.Repo.Status != DoctorStatusLegacyOnly {
+		t.Fatalf("repo status = %q, want %q", result.Repo.Status, DoctorStatusLegacyOnly)
+	}
+	if len(result.Repo.Candidates) != 2 {
+		t.Fatalf("repo candidates = %d, want 2", len(result.Repo.Candidates))
+	}
+	xdg := doctorCandidateByStyle(t, result.Repo.Candidates, config.StyleXDG)
+	if xdg.Manifest != nil {
+		t.Fatalf("legacy xdg candidate manifest = %#v, want nil", xdg.Manifest)
+	}
+	if xdg.Status != string(config.StatusLegacyOnly) {
+		t.Fatalf("legacy xdg candidate status = %q", xdg.Status)
+	}
+	if !strings.Contains(result.Repo.RepairHint, "migrate or repair one authoritative layout") {
+		t.Fatalf("repair hint = %q", result.Repo.RepairHint)
+	}
+}
+
+func TestMigrationPromptStillGeneratesForLegacyRepoScenario(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := writeLegacyRepoConfigForStyle(t, repoRoot, config.StyleXDG, config.Default()); err != nil {
+		t.Fatalf("write legacy xdg repo config: %v", err)
+	}
+
+	result, err := Doctor(context.Background(), DoctorRequest{
+		RepoRoot:                repoRoot,
+		Scope:                   DoctorScopeRepo,
+		GenerateMigrationPrompt: true,
+		DestinationStyle:        config.StyleHome,
+		DestinationHome:         ".changes",
+	})
+	if err != nil {
+		t.Fatalf("Doctor returned error: %v", err)
+	}
+
+	prompt := result.MigrationPrompt
+	for _, fragment := range []string{
+		"Status: legacy-detected",
+		"No authoritative origin candidate exists.",
+		"Candidate xdg: status=legacy_only",
+		"Destination style: home",
+		"Destination root: " + filepath.Join(repoRoot, ".changes"),
+		"Confirm the final layout resolves through changes doctor --scope repo.",
+	} {
+		if !strings.Contains(prompt, fragment) {
+			t.Fatalf("migration prompt missing %q:\n%s", fragment, prompt)
+		}
+	}
+}
+
+func TestDoctorExplainsLegacyRepoRepairPath(t *testing.T) {
+	repoRoot := t.TempDir()
+	if err := writeLegacyRepoConfigForStyle(t, repoRoot, config.StyleHome, config.Default()); err != nil {
+		t.Fatalf("write legacy home repo config: %v", err)
+	}
+
+	result, err := Doctor(context.Background(), DoctorRequest{
+		RepoRoot: repoRoot,
+		Scope:    DoctorScopeRepo,
+	})
+	if err != nil {
+		t.Fatalf("Doctor returned error: %v", err)
+	}
+
+	if result.Repo == nil {
+		t.Fatalf("repo scope result is nil")
+	}
+	if result.Repo.Status != DoctorStatusLegacyOnly {
+		t.Fatalf("repo status = %q, want %q", result.Repo.Status, DoctorStatusLegacyOnly)
+	}
+	if !strings.Contains(result.Repo.RepairHint, "changes doctor --scope repo") {
+		t.Fatalf("repair hint = %q", result.Repo.RepairHint)
+	}
+}
+
 func doctorCandidateByStyle(t *testing.T, candidates []DoctorCandidate, style config.Style) DoctorCandidate {
 	t.Helper()
 	for _, candidate := range candidates {

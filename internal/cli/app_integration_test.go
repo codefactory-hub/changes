@@ -408,6 +408,42 @@ func TestInitRejectsHomeFlagWithoutHomeLayout(t *testing.T) {
 	}
 }
 
+func TestAppInitUsesGlobalRepoInitDefaultsWhenPresent(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome := configureGlobalLayoutEnv(t)
+	if err := writeManagedGlobalRepoInitDefaults(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, config.StyleXDG, "[repo.init]\nstyle = \"home\"\nhome = \".changes-global\"\n"); err != nil {
+		t.Fatalf("write managed global defaults: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 7, 3, 40, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{1, 2, 3, 4})
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	body := stdout.String()
+	if !strings.Contains(body, "layout: home") {
+		t.Fatalf("init stdout missing selected home layout:\n%s", body)
+	}
+	if !strings.Contains(body, "config: .changes-global/config") {
+		t.Fatalf("init stdout missing global-default config path:\n%s", body)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("init stderr should be empty for one authoritative global default:\n%s", stderr.String())
+	}
+}
+
 func TestDoctorDefaultsToRepoScopeInsideRepository(t *testing.T) {
 	repoRoot := t.TempDir()
 	gitInit(t, repoRoot)
@@ -618,6 +654,88 @@ func TestDoctorMigrationPromptWritesFileWhenOutputIsSet(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("doctor migration prompt should not write stderr:\n%s", stderr.String())
 	}
+}
+
+func TestCLIWarnsOrFailsConsistentlyAcrossFocusedRolloutScenarios(t *testing.T) {
+	t.Run("default repo init reports xdg", func(t *testing.T) {
+		repoRoot := t.TempDir()
+		gitInit(t, repoRoot)
+		t.Chdir(repoRoot)
+		t.Setenv("CHANGES_HOME", "")
+		t.Setenv("XDG_CONFIG_HOME", "")
+		t.Setenv("XDG_DATA_HOME", "")
+		t.Setenv("XDG_STATE_HOME", "")
+
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+
+		app := NewApp(&stdout, &stderr)
+		app.Now = func() time.Time {
+			return time.Date(2026, 4, 7, 3, 45, 0, 0, time.UTC)
+		}
+		app.Random = bytes.NewReader([]byte{4, 5, 6, 7})
+		app.IsTTY = func() bool { return false }
+
+		if err := app.Run(context.Background(), []string{"init"}); err != nil {
+			t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "layout: xdg") {
+			t.Fatalf("init stdout missing xdg layout:\n%s", stdout.String())
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("init stderr should be empty:\n%s", stderr.String())
+		}
+	})
+
+	t.Run("legacy repo status fails with doctor guidance", func(t *testing.T) {
+		repoRoot := t.TempDir()
+		gitInit(t, repoRoot)
+		t.Chdir(repoRoot)
+
+		if err := writeLegacyRepoConfigForStyle(t, repoRoot, config.StyleXDG, config.Default()); err != nil {
+			t.Fatalf("write legacy xdg config: %v", err)
+		}
+
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+
+		app := NewApp(&stdout, &stderr)
+		err := app.Run(context.Background(), []string{"status"})
+		if err == nil {
+			t.Fatalf("status returned nil error")
+		}
+		if !strings.Contains(stderr.String(), "error: repo authority is legacy-only") || !strings.Contains(stderr.String(), "changes doctor --scope repo") {
+			t.Fatalf("status stderr missing legacy doctor guidance:\n%s", stderr.String())
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("status stdout should be empty on failure:\n%s", stdout.String())
+		}
+	})
+
+	t.Run("doctor explain remains useful for legacy repo", func(t *testing.T) {
+		repoRoot := t.TempDir()
+		gitInit(t, repoRoot)
+		t.Chdir(repoRoot)
+
+		if err := writeLegacyRepoConfigForStyle(t, repoRoot, config.StyleHome, config.Default()); err != nil {
+			t.Fatalf("write legacy home config: %v", err)
+		}
+
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+
+		app := NewApp(&stdout, &stderr)
+		if err := app.Run(context.Background(), []string{"doctor", "--scope", "repo", "--explain"}); err != nil {
+			t.Fatalf("doctor --explain returned error: %v\nstderr=%s", err, stderr.String())
+		}
+		body := stdout.String()
+		if !strings.Contains(body, "Status: legacy-detected") || !strings.Contains(body, "Repair hint:") {
+			t.Fatalf("doctor explain missing legacy detail:\n%s", body)
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("doctor --explain should not write stderr:\n%s", stderr.String())
+		}
+	})
 }
 
 func TestStatusExplainShowsPolicyEvidence(t *testing.T) {

@@ -88,6 +88,59 @@ func TestSelectRepoInitLayoutPrefersChangesHomeSignalOverXDGSignal(t *testing.T)
 	}
 }
 
+func TestSelectRepoInitLayoutUsesGlobalRepoInitDefaultsBeforeEnvSignals(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	selection, err := SelectRepoInitLayout(RepoInitSelectionOptions{
+		RepoRoot:        repoRoot,
+		GlobalInitStyle: "home",
+		GlobalInitHome:  ".changes-managed",
+		ChangesHome:     filepath.Join(t.TempDir(), "changes-home"),
+		XDGConfigHome:   filepath.Join(t.TempDir(), "xdg-config"),
+		XDGDataHome:     filepath.Join(t.TempDir(), "xdg-data"),
+		XDGStateHome:    filepath.Join(t.TempDir(), "xdg-state"),
+	})
+	if err != nil {
+		t.Fatalf("SelectRepoInitLayout returned error: %v", err)
+	}
+	if selection.Style != StyleHome {
+		t.Fatalf("style = %q, want %q", selection.Style, StyleHome)
+	}
+	if selection.Root != filepath.Join(repoRoot, ".changes-managed") {
+		t.Fatalf("root = %q", selection.Root)
+	}
+	if selection.GitignoreEntry != "/.changes-managed/state/" {
+		t.Fatalf("gitignore entry = %q", selection.GitignoreEntry)
+	}
+}
+
+func TestSelectRepoInitLayoutExplicitFlagsBeatGlobalDefaultsAndEnvSignals(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	selection, err := SelectRepoInitLayout(RepoInitSelectionOptions{
+		RepoRoot:        repoRoot,
+		RequestedStyle:  "xdg",
+		GlobalInitStyle: "home",
+		GlobalInitHome:  ".changes-managed",
+		ChangesHome:     filepath.Join(t.TempDir(), "changes-home"),
+		XDGConfigHome:   filepath.Join(t.TempDir(), "xdg-config"),
+		XDGDataHome:     filepath.Join(t.TempDir(), "xdg-data"),
+		XDGStateHome:    filepath.Join(t.TempDir(), "xdg-state"),
+	})
+	if err != nil {
+		t.Fatalf("SelectRepoInitLayout returned error: %v", err)
+	}
+	if selection.Style != StyleXDG {
+		t.Fatalf("style = %q, want %q", selection.Style, StyleXDG)
+	}
+	if selection.Root != repoRoot {
+		t.Fatalf("root = %q, want %q", selection.Root, repoRoot)
+	}
+	if selection.GitignoreEntry != "/.local/state/" {
+		t.Fatalf("gitignore entry = %q", selection.GitignoreEntry)
+	}
+}
+
 func TestSelectGlobalInitLayoutDefaultsToXDG(t *testing.T) {
 	homeDir := t.TempDir()
 
@@ -130,6 +183,31 @@ func TestSelectGlobalInitLayoutUsesRequestedHome(t *testing.T) {
 		t.Fatalf("root = %q, want %q", selection.Root, customHome)
 	}
 	if selection.Config != filepath.Join(customHome, "config") {
+		t.Fatalf("config = %q", selection.Config)
+	}
+}
+
+func TestSelectGlobalInitLayoutPrefersChangesHomeOverXDGEnv(t *testing.T) {
+	homeDir := t.TempDir()
+	changesHome := filepath.Join(homeDir, ".changes-home")
+
+	selection, err := SelectGlobalInitLayout(GlobalInitSelectionOptions{
+		HomeDir:       homeDir,
+		ChangesHome:   changesHome,
+		XDGConfigHome: filepath.Join(homeDir, ".config-home"),
+		XDGDataHome:   filepath.Join(homeDir, ".data-home"),
+		XDGStateHome:  filepath.Join(homeDir, ".state-home"),
+	})
+	if err != nil {
+		t.Fatalf("SelectGlobalInitLayout returned error: %v", err)
+	}
+	if selection.Style != StyleHome {
+		t.Fatalf("style = %q, want %q", selection.Style, StyleHome)
+	}
+	if selection.Root != changesHome {
+		t.Fatalf("root = %q, want %q", selection.Root, changesHome)
+	}
+	if selection.Config != filepath.Join(changesHome, "config") {
 		t.Fatalf("config = %q", selection.Config)
 	}
 }
