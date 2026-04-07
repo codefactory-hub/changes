@@ -158,6 +158,8 @@ changes doctor --migration-prompt --scope repo --to home
 
 By default, `changes doctor` inspects the repo scope when you are inside a repository. Use `--scope global` or `--scope all` when you need broader inspection. `--migration-prompt` prints the advisory Markdown brief to stdout unless you supply `--output PATH`.
 
+Existing repos initialized by current `changes` flows include `layout.toml` and continue to operate normally. Older repos that only have legacy directory/config shapes without `layout.toml` are treated as legacy layouts: inspect them with `changes doctor --scope repo --explain` and generate migration help with `changes doctor --migration-prompt --scope repo --to home` or the corresponding `xdg` target before expecting ordinary commands to succeed.
+
 ## Current command surface
 
 ```text

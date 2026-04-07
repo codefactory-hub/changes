@@ -82,7 +82,7 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md — Prove the focused default-selection precedence set and mixed compatibility stance
-- [ ] 05-02-PLAN.md — Close the layered rollout matrix, document the legacy boundary, and verify the full suite
+- [x] 05-02-PLAN.md — Close the layered rollout matrix, document the legacy boundary, and verify the full suite
 
 ## Progress
 
@@ -95,4 +95,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Resolution Core | 2/2 | Complete   | 2026-04-06 |
 | 3. Authority and Safety | 2/2 | Complete | 2026-04-07 |
 | 4. Command UX and Migration Help | 2/2 | Complete | 2026-04-07 |
-| 5. Rollout Verification | 0/2 | Not started | - |
+| 5. Rollout Verification | 2/2 | In Progress | - |
