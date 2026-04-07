@@ -219,6 +219,93 @@ func TestInitializeRestoresGitignoreOnFailure(t *testing.T) {
 	}
 }
 
+func TestInitializeRejectsAmbiguousRepoAuthorityBeforeWriting(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	if err := writeManagedRepoConfigForStyle(t, repoRoot, config.StyleXDG, config.Default()); err != nil {
+		t.Fatalf("write xdg config: %v", err)
+	}
+	if err := writeManagedRepoConfigForStyle(t, repoRoot, config.StyleHome, config.Default()); err != nil {
+		t.Fatalf("write home config: %v", err)
+	}
+
+	_, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot: repoRoot,
+		Now:      time.Date(2026, 4, 6, 13, 45, 0, 0, time.UTC),
+		Random:   bytes.NewReader([]byte{1, 2, 3, 4}),
+	})
+	if err == nil {
+		t.Fatalf("Initialize returned nil error")
+	}
+
+	var authorityErr *config.AuthorityError
+	if !errors.As(err, &authorityErr) {
+		t.Fatalf("Initialize error = %v, want AuthorityError", err)
+	}
+	if authorityErr.Scope != config.ScopeRepo || authorityErr.Status != config.StatusAmbiguous {
+		t.Fatalf("authority error = %#v, want ambiguous repo authority", authorityErr)
+	}
+}
+
+func TestInitializeRejectsAmbiguousGlobalDefaultsAuthority(t *testing.T) {
+	repoRoot := t.TempDir()
+	homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome := configureGlobalLayoutEnv(t)
+
+	if err := writeManagedGlobalRepoInitDefaults(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, config.StyleXDG, "[repo.init]\nstyle = \"xdg\"\n"); err != nil {
+		t.Fatalf("write xdg global defaults: %v", err)
+	}
+	if err := writeManagedGlobalRepoInitDefaults(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, config.StyleHome, "[repo.init]\nstyle = \"home\"\nhome = \".changes-home\"\n"); err != nil {
+		t.Fatalf("write home global defaults: %v", err)
+	}
+
+	_, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot: repoRoot,
+		Now:      time.Date(2026, 4, 6, 13, 50, 0, 0, time.UTC),
+		Random:   bytes.NewReader([]byte{5, 6, 7, 8}),
+	})
+	if err == nil {
+		t.Fatalf("Initialize returned nil error")
+	}
+
+	var authorityErr *config.AuthorityError
+	if !errors.As(err, &authorityErr) {
+		t.Fatalf("Initialize error = %v, want AuthorityError", err)
+	}
+	if authorityErr.Scope != config.ScopeGlobal || authorityErr.Status != config.StatusAmbiguous {
+		t.Fatalf("authority error = %#v, want ambiguous global authority", authorityErr)
+	}
+}
+
+func TestInitializeCarriesWarningsForGlobalDefaultsSibling(t *testing.T) {
+	repoRoot := t.TempDir()
+	homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome := configureGlobalLayoutEnv(t)
+
+	if err := writeManagedGlobalRepoInitDefaults(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, config.StyleXDG, "[repo.init]\nstyle = \"home\"\nhome = \".changes-global\"\n"); err != nil {
+		t.Fatalf("write xdg global defaults: %v", err)
+	}
+	if err := writeLegacyGlobalRepoInitDefaults(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, config.StyleHome, "[repo.init]\nstyle = \"home\"\nhome = \".changes-legacy\"\n"); err != nil {
+		t.Fatalf("write legacy home global defaults: %v", err)
+	}
+
+	result, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot: repoRoot,
+		Now:      time.Date(2026, 4, 6, 13, 55, 0, 0, time.UTC),
+		Random:   bytes.NewReader([]byte{9, 10, 11, 12}),
+	})
+	if err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+	if len(result.AuthorityWarnings) != 1 {
+		t.Fatalf("authority warnings = %#v, want 1 warning", result.AuthorityWarnings)
+	}
+	if result.AuthorityWarnings[0].Scope != config.ScopeGlobal || result.AuthorityWarnings[0].Status != config.StatusLegacyOnly || result.AuthorityWarnings[0].Style != config.StyleHome {
+		t.Fatalf("warning = %#v, want global legacy-only home sibling", result.AuthorityWarnings[0])
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, ".changes-global", "config", "config.toml")); err != nil {
+		t.Fatalf("expected init to honor global repo.init defaults, err=%v", err)
+	}
+}
+
 func TestStatusUsesUnreleasedOrLatestReleaseRecord(t *testing.T) {
 	repoRoot := t.TempDir()
 	now := time.Date(2026, 4, 6, 14, 0, 0, 0, time.UTC)
@@ -280,6 +367,33 @@ func TestStatusUsesUnreleasedOrLatestReleaseRecord(t *testing.T) {
 	}
 	if adoptedStatus.InitialReleaseTarget != nil {
 		t.Fatalf("initial release target = %v, want nil", adoptedStatus.InitialReleaseTarget)
+	}
+}
+
+func TestStatusCarriesAuthorityWarningsForLegacySibling(t *testing.T) {
+	repoRoot := t.TempDir()
+	now := time.Date(2026, 4, 6, 14, 30, 0, 0, time.UTC)
+
+	if _, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot: repoRoot,
+		Now:      now,
+		Random:   bytes.NewReader([]byte{1, 2, 3, 4}),
+	}); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+	if err := writeLegacyRepoConfigForStyle(t, repoRoot, config.StyleHome, config.Default()); err != nil {
+		t.Fatalf("write legacy home config: %v", err)
+	}
+
+	result, err := Status(context.Background(), StatusRequest{RepoRoot: repoRoot})
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	if len(result.AuthorityWarnings) != 1 {
+		t.Fatalf("authority warnings = %#v, want 1 warning", result.AuthorityWarnings)
+	}
+	if result.AuthorityWarnings[0].Status != config.StatusLegacyOnly || result.AuthorityWarnings[0].Style != config.StyleHome {
+		t.Fatalf("warning = %#v, want legacy-only home sibling", result.AuthorityWarnings[0])
 	}
 }
 
@@ -396,6 +510,47 @@ func TestPlanReleaseReturnsNoneWhenNoImpactIsInferred(t *testing.T) {
 	}
 }
 
+func TestPlanReleaseCarriesAuthorityWarningsForLegacySibling(t *testing.T) {
+	repoRoot := t.TempDir()
+	now := time.Date(2026, 4, 6, 16, 15, 0, 0, time.UTC)
+
+	if _, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot: repoRoot,
+		Now:      now,
+		Random:   bytes.NewReader([]byte{1, 2, 3, 4}),
+	}); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+
+	cfg, err := config.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if _, err := fragments.Create(repoRoot, cfg, now.Add(time.Minute), bytes.NewReader([]byte{5, 6, 7, 8}), fragments.NewInput{
+		Behavior: "fix",
+		Body:     "Fix the parser edge case.",
+	}); err != nil {
+		t.Fatalf("create fragment: %v", err)
+	}
+	if err := writeLegacyRepoConfigForStyle(t, repoRoot, config.StyleHome, config.Default()); err != nil {
+		t.Fatalf("write legacy home config: %v", err)
+	}
+
+	plan, err := PlanRelease(context.Background(), ReleasePlanRequest{
+		RepoRoot: repoRoot,
+		Now:      now.Add(2 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("PlanRelease returned error: %v", err)
+	}
+	if len(plan.AuthorityWarnings) != 1 {
+		t.Fatalf("authority warnings = %#v, want 1 warning", plan.AuthorityWarnings)
+	}
+	if plan.AuthorityWarnings[0].Status != config.StatusLegacyOnly || plan.AuthorityWarnings[0].Style != config.StyleHome {
+		t.Fatalf("warning = %#v, want legacy-only home sibling", plan.AuthorityWarnings[0])
+	}
+}
+
 func TestCommitReleasePersistsThePlannedRecord(t *testing.T) {
 	repoRoot := t.TempDir()
 	now := time.Date(2026, 4, 6, 16, 30, 0, 0, time.UTC)
@@ -473,6 +628,53 @@ func TestCommitReleaseRejectsStaleOrDuplicatePlans(t *testing.T) {
 	}
 	if _, err := CommitRelease(context.Background(), plan); err == nil || !strings.Contains(err.Error(), "stale") {
 		t.Fatalf("second CommitRelease error = %v, want stale-plan failure", err)
+	}
+}
+
+func TestCommitReleaseRejectsAmbiguousRepoAuthorityBeforeWriting(t *testing.T) {
+	repoRoot := t.TempDir()
+	now := time.Date(2026, 4, 6, 16, 50, 0, 0, time.UTC)
+
+	if _, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot: repoRoot,
+		Now:      now,
+		Random:   bytes.NewReader([]byte{1, 2, 3, 4}),
+	}); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+	cfg, err := config.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if _, err := fragments.Create(repoRoot, cfg, now.Add(time.Minute), bytes.NewReader([]byte{5, 6, 7, 8}), fragments.NewInput{
+		Behavior: "fix",
+		Body:     "Fix the shipped parser crash.",
+	}); err != nil {
+		t.Fatalf("create fragment: %v", err)
+	}
+
+	plan, err := PlanRelease(context.Background(), ReleasePlanRequest{
+		RepoRoot: repoRoot,
+		Now:      now.Add(2 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("PlanRelease returned error: %v", err)
+	}
+	if err := writeManagedRepoConfigForStyle(t, repoRoot, config.StyleHome, config.Default()); err != nil {
+		t.Fatalf("write home config: %v", err)
+	}
+
+	_, err = CommitRelease(context.Background(), plan)
+	if err == nil {
+		t.Fatalf("CommitRelease returned nil error")
+	}
+
+	var authorityErr *config.AuthorityError
+	if !errors.As(err, &authorityErr) {
+		t.Fatalf("CommitRelease error = %v, want AuthorityError", err)
+	}
+	if authorityErr.Scope != config.ScopeRepo || authorityErr.Status != config.StatusAmbiguous {
+		t.Fatalf("authority error = %#v, want ambiguous repo authority", authorityErr)
 	}
 }
 
@@ -555,6 +757,38 @@ func TestRenderValidatesSelectorsAndLatestAvailability(t *testing.T) {
 		Latest:   true,
 	}); err == nil || !strings.Contains(err.Error(), "no final release records exist") {
 		t.Fatalf("Render latest before release error = %v, want missing latest record failure", err)
+	}
+}
+
+func TestRenderCarriesAuthorityWarningsForInvalidSibling(t *testing.T) {
+	repoRoot := t.TempDir()
+	now := time.Date(2026, 4, 6, 17, 20, 0, 0, time.UTC)
+
+	if _, err := Initialize(context.Background(), InitializeRequest{
+		RepoRoot:       repoRoot,
+		CurrentVersion: "2.7.4",
+		Now:            now,
+		Random:         bytes.NewReader([]byte{1, 2, 3, 4}),
+	}); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+	if err := writeInvalidRepoManifestForStyle(t, repoRoot, config.StyleHome); err != nil {
+		t.Fatalf("write invalid home manifest: %v", err)
+	}
+
+	result, err := Render(context.Background(), RenderRequest{
+		RepoRoot: repoRoot,
+		Latest:   true,
+		Profile:  config.RenderProfileGitHubRelease,
+	})
+	if err != nil {
+		t.Fatalf("Render returned error: %v", err)
+	}
+	if len(result.AuthorityWarnings) != 1 {
+		t.Fatalf("authority warnings = %#v, want 1 warning", result.AuthorityWarnings)
+	}
+	if result.AuthorityWarnings[0].Status != config.StatusInvalid || result.AuthorityWarnings[0].Style != config.StyleHome {
+		t.Fatalf("warning = %#v, want invalid home sibling", result.AuthorityWarnings[0])
 	}
 }
 
@@ -650,4 +884,140 @@ func assertDirEmptyOrMissing(t *testing.T, path string) {
 	if len(entries) != 0 {
 		t.Fatalf("expected %s to be empty, found %d entries", path, len(entries))
 	}
+}
+
+func configureGlobalLayoutEnv(t *testing.T) (string, string, string, string, string) {
+	t.Helper()
+	homeDir := t.TempDir()
+	changesHome := filepath.Join(homeDir, ".changes-home")
+	xdgConfigHome := filepath.Join(homeDir, ".config-home")
+	xdgDataHome := filepath.Join(homeDir, ".data-home")
+	xdgStateHome := filepath.Join(homeDir, ".state-home")
+
+	t.Setenv("HOME", homeDir)
+	t.Setenv("CHANGES_HOME", changesHome)
+	t.Setenv("XDG_CONFIG_HOME", xdgConfigHome)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+	t.Setenv("XDG_STATE_HOME", xdgStateHome)
+
+	return homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome
+}
+
+func writeManagedRepoConfigForStyle(t *testing.T, repoRoot string, style config.Style, cfg config.Config) error {
+	t.Helper()
+	if err := writeRepoLayoutManifestForStyle(t, repoRoot, style); err != nil {
+		return err
+	}
+	return config.Write(repoConfigPathForStyle(repoRoot, style), cfg)
+}
+
+func writeLegacyRepoConfigForStyle(t *testing.T, repoRoot string, style config.Style, cfg config.Config) error {
+	t.Helper()
+	path := repoConfigPathForStyle(repoRoot, style)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return config.Write(path, cfg)
+}
+
+func writeInvalidRepoManifestForStyle(t *testing.T, repoRoot string, style config.Style) error {
+	t.Helper()
+	path := repoLayoutManifestPathForStyle(repoRoot, style)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte("schema_version = 1\nscope = \"repo\"\nstyle = \"wrong\"\n"), 0o644)
+}
+
+func writeManagedGlobalRepoInitDefaults(t *testing.T, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome string, style config.Style, raw string) error {
+	t.Helper()
+	if err := writeGlobalLayoutManifestForStyle(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, style); err != nil {
+		return err
+	}
+	return writeGlobalConfigFileForStyle(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, style, raw)
+}
+
+func writeLegacyGlobalRepoInitDefaults(t *testing.T, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome string, style config.Style, raw string) error {
+	t.Helper()
+	return writeGlobalConfigFileForStyle(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, style, raw)
+}
+
+func writeGlobalConfigFileForStyle(t *testing.T, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome string, style config.Style, raw string) error {
+	t.Helper()
+	path := globalConfigPathForStyle(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, style)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(raw), 0o644)
+}
+
+func writeRepoLayoutManifestForStyle(t *testing.T, repoRoot string, style config.Style) error {
+	t.Helper()
+	path := repoLayoutManifestPathForStyle(repoRoot, style)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	var raw string
+	switch style {
+	case config.StyleHome:
+		raw = "schema_version = 1\nscope = \"repo\"\nstyle = \"home\"\n\n[layout]\nroot = \"$REPO_ROOT/.changes\"\nconfig = \"$layout.root/config\"\ndata = \"$layout.root/data\"\nstate = \"$layout.root/state\"\n"
+	default:
+		raw = "schema_version = 1\nscope = \"repo\"\nstyle = \"xdg\"\n\n[layout]\nroot = \"$REPO_ROOT\"\nconfig = \"$REPO_ROOT/.config/changes\"\ndata = \"$REPO_ROOT/.local/share/changes\"\nstate = \"$REPO_ROOT/.local/state/changes\"\n"
+	}
+	return os.WriteFile(path, []byte(raw), 0o644)
+}
+
+func writeGlobalLayoutManifestForStyle(t *testing.T, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome string, style config.Style) error {
+	t.Helper()
+	path := globalLayoutManifestPathForStyle(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, style)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	var raw string
+	switch style {
+	case config.StyleHome:
+		raw = "schema_version = 1\nscope = \"global\"\nstyle = \"home\"\n\n[layout]\nroot = \"$CHANGES_HOME\"\nconfig = \"$layout.root/config\"\ndata = \"$layout.root/data\"\nstate = \"$layout.root/state\"\n"
+	default:
+		raw = "schema_version = 1\nscope = \"global\"\nstyle = \"xdg\"\n\n[layout]\nroot = \"$HOME\"\nconfig = \"$XDG_CONFIG_HOME/changes\"\ndata = \"$XDG_DATA_HOME/changes\"\nstate = \"$XDG_STATE_HOME/changes\"\n"
+	}
+	return os.WriteFile(path, []byte(raw), 0o644)
+}
+
+func globalLayoutManifestPathForStyle(t *testing.T, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome string, style config.Style) string {
+	t.Helper()
+	return filepath.Join(filepath.Dir(globalConfigPathForStyle(t, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome, style)), "layout.toml")
+}
+
+func globalConfigPathForStyle(t *testing.T, homeDir, changesHome, xdgConfigHome, xdgDataHome, xdgStateHome string, style config.Style) string {
+	t.Helper()
+	resolution, err := config.ResolveGlobal(config.ResolveOptions{
+		HomeDir:       homeDir,
+		ChangesHome:   changesHome,
+		XDGConfigHome: xdgConfigHome,
+		XDGDataHome:   xdgDataHome,
+		XDGStateHome:  xdgStateHome,
+	})
+	if err != nil {
+		t.Fatalf("resolve global candidate paths: %v", err)
+	}
+	for _, candidate := range resolution.Candidates {
+		if candidate.Style == style {
+			return filepath.Join(candidate.Paths.Config, "config.toml")
+		}
+	}
+	t.Fatalf("missing global candidate for style %s", style)
+	return ""
+}
+
+func repoLayoutManifestPathForStyle(repoRoot string, style config.Style) string {
+	return filepath.Join(filepath.Dir(repoConfigPathForStyle(repoRoot, style)), "layout.toml")
+}
+
+func repoConfigPathForStyle(repoRoot string, style config.Style) string {
+	if style == config.StyleHome {
+		return filepath.Join(repoRoot, ".changes", "config", "config.toml")
+	}
+	return filepath.Join(repoRoot, ".config", "changes", "config.toml")
 }
