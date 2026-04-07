@@ -2,7 +2,7 @@
 
 ## What This Is
 
-`changes` is a Go CLI for managing release fragments, release records, and rendered release notes from canonical project history. As of `0.1.0-rc.1`, it supports flexible global and repo-local storage layouts through `xdg` and `home` styles, manifest-backed authority selection, `doctor`-based inspection, and migration-oriented guidance for operators moving between supported layouts.
+`changes` is a Go CLI for managing release fragments, release records, and rendered release notes from canonical project history. As of `0.1.0-rc.2`, it supports flexible global and repo-local storage layouts through `xdg` and `home` styles, manifest-backed authority selection, `doctor`-based inspection, migration-oriented guidance, and explicit repo-local repair for legacy no-manifest repositories.
 
 ## Core Value
 
@@ -10,24 +10,19 @@
 
 ## Current State
 
-- Shipped milestone: `0.1.0-rc.1` on 2026-04-07
+- Shipped milestone: `0.1.0-rc.2` on 2026-04-07
 - Current operator model:
   - `xdg` remains the default layout style
   - `home` is supported for global `CHANGES_HOME` and repo-local `.changes` style layouts
   - ordinary commands require manifest-backed authoritative layouts
-  - legacy no-manifest layouts are diagnosable with `changes doctor` and require repair or migration before normal operation
+  - legacy no-manifest layouts are diagnosable with `changes doctor`
+  - legacy repo-local layouts can be repaired with `changes doctor --scope repo --repair`
+  - broader layout migrations still use `changes doctor --migration-prompt`
 - Current milestone archive:
+  - Roadmap: `.planning/milestones/v0.1.0-rc.2-ROADMAP.md`
+  - Requirements: `.planning/milestones/v0.1.0-rc.2-REQUIREMENTS.md`
   - Roadmap: `.planning/milestones/v0.1.0-rc.1-ROADMAP.md`
   - Requirements: `.planning/milestones/v0.1.0-rc.1-REQUIREMENTS.md`
-
-## Current Milestone: v0.1.0-rc.2 Legacy Layout Repair
-
-**Goal:** close the operator gap for existing legacy repositories by adding an explicit repo-local repair path instead of requiring manual manifest creation.
-
-**Target features:**
-- add a `changes doctor --scope repo --repair` flow or equivalent narrow repair command
-- stamp the authoritative repo-local manifest for a legacy preferred candidate without migrating data
-- keep the repair path fail-loud on ambiguity and explicit about what changed
 
 ## Requirements
 
@@ -43,20 +38,20 @@
 - ✓ Users can inspect active layout authority, precedence, and ambiguity through `changes doctor` — `0.1.0-rc.1`
 - ✓ Users can generate migration-oriented layout briefs with deterministic source and destination facts — `0.1.0-rc.1`
 - ✓ Users get fail-loud single-target writes, explicit ambiguity handling, and rollout-safe init defaults for layout management — `0.1.0-rc.1`
+- ✓ Users can repair a legacy repo-local layout with `changes doctor --scope repo --repair` instead of creating `layout.toml` by hand — `0.1.0-rc.2`
+- ✓ Repo-local repair remains single-target, fail-loud on ambiguity, and preserves the authoritative state ignore rule — `0.1.0-rc.2`
+- ✓ Docs now explain when repair is appropriate versus when migration prompts are still required — `0.1.0-rc.2`
 
 ### Active
 
-- [ ] Add an operator-friendly repair path for legacy repo-local layouts so users do not need to create `layout.toml` by hand
-- [ ] Ensure repair stamps exactly one authoritative layout and preserves single-target safety guarantees
-- [ ] Explain clearly when operators should use repair versus migration guidance
 - [ ] Validate operator-completed migrations against the expected source and destination layouts
 - [ ] Support future directory schema revisions beyond the first flexible-layout rollout
 
 ## Next Milestone Goals
 
-- Add a narrow repo-local repair command for legacy layouts, likely centered on `changes doctor --scope repo --repair`
-- Make existing legacy repos recoverable without manual manifest authoring while preserving the current authority model
-- Keep migration validation and future schema evolution as follow-on work after the repair path lands
+- Validate completed operator migrations against the expected source and destination layouts
+- Define how future directory schema revisions should be introduced without weakening current authority guarantees
+- Decide whether global legacy-layout repair automation is warranted after operator feedback on the repo-local repair flow
 
 ## Out of Scope
 
@@ -67,7 +62,7 @@
 
 ## Context
 
-This is now a brownfield CLI that ships the first flexible-layout milestone. The codebase includes a shared resolver core in `internal/config/`, authority-aware app and CLI flows in `internal/app/` and `internal/cli/`, and rollout coverage that locks the precedence and compatibility boundary. The current product state is intentionally conservative: manifest-backed layouts are the operational boundary, and legacy repositories are handled through explicit `doctor` inspection and migration guidance rather than hidden compatibility heuristics.
+This is now a brownfield CLI that has shipped the first flexible-layout milestone and its first repair follow-up. The codebase includes a shared resolver core in `internal/config/`, authority-aware app and CLI flows in `internal/app/` and `internal/cli/`, rollout coverage that locks the precedence and compatibility boundary, and an explicit repo-local repair workflow for legacy layouts. The current product state remains intentionally conservative: manifest-backed layouts are the operational boundary, repairs are explicit, and broader migrations still rely on `doctor` guidance rather than hidden compatibility heuristics.
 
 The next work should build on that shipped boundary rather than reopening it casually. Existing codebase mapping in `.planning/codebase/` and the archived milestone docs should be treated as the reference record for how the current layout model was introduced.
 
@@ -111,4 +106,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-07 for `0.1.0-rc.2` milestone start*
+*Last updated: 2026-04-07 after `0.1.0-rc.2` milestone*

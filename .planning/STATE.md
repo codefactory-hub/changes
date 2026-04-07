@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1.0-rc.2
-milestone_name: legacy-layout-repair
-status: planning
-stopped_at: Completed Phase 06-legacy-layout-repair
-last_updated: "2026-04-07T14:00:00Z"
+milestone: null
+milestone_name: null
+status: ready
+stopped_at: Archived milestone v0.1.0-rc.2
+last_updated: "2026-04-07T08:07:00Z"
 last_activity: 2026-04-07
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,48 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Milestone closeout
+**Current focus:** Awaiting next milestone
 
 ## Current Position
 
-Phase set: All roadmap phases complete
-Plan: All 1 plans complete
-Status: Ready for milestone completion or audit
+Phase set: No active roadmap phases
+Plan: No active plans
+Status: Ready for the next milestone definition
 Last activity: 2026-04-07
 
-Progress: [██████████] 100%
-
-## Performance Metrics
-
-**Velocity:**
-
-- Total plans completed: 8
-- Average duration: 9m38s
-- Total execution time: 1.3 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01-layout-proposal | 2 | 6 min | 3 min |
-| 02-resolution-core | 2 | 18 min | 9 min |
-| 03-authority-and-safety | 2 | 19m22s | 9m41s |
-| 04-command-ux-and-migration-help | 2 | 30m21s | 15m10s |
-| 05-rollout-verification | 2 | 31m | 15m30s |
-
-**Recent Trend:**
-
-- Last 5 plans: 8m28s, 6m22s, 13m, 12m34s, 17m47s
-- Trend: Slightly increasing as CLI and documentation phases add cross-surface verification work
-
-| Phase 02 P01 | 10m17s | 2 tasks | 5 files |
-| Phase 02 P02 | 508 | 3 tasks | 7 files |
-| Phase 03-authority-and-safety P01 | 6m22s | 2 tasks | 7 files |
-| Phase 03-authority-and-safety P02 | 13m | 3 tasks | 8 files |
-| Phase 04-command-ux-and-migration-help P01 | 12m34s | 2 tasks | 5 files |
-| Phase 04-command-ux-and-migration-help P02 | 17m47s | 2 tasks | 8 files |
-| Phase 05-rollout-verification P01 | 23m | 2 tasks | 4 files |
-| Phase 05-rollout-verification P02 | 8m | 2 tasks | 1 files |
+Progress: [----------] 0%
 
 ## Accumulated Context
 
@@ -102,21 +70,23 @@ Recent decisions affecting current work:
 - [Phase 05-rollout-verification]: Mixed rollout compatibility is now explicit in tests: manifest-backed repos operate normally, while legacy repos fail cleanly and remain diagnosable through `doctor`.
 - [Phase 05-rollout-verification]: The README now states the legacy rollout boundary explicitly and points older repos without `layout.toml` toward doctor-guided repair or migration.
 - [Phase 05-rollout-verification]: Phase verification passed for the focused precedence set, manifest-backed compatibility, legacy diagnosability, and the final layered regression matrix.
+- [Phase 06-legacy-layout-repair]: `changes doctor --scope repo --repair` is now the narrow recovery path for legacy repo-local layouts that are otherwise blocked by the manifest-backed operational boundary.
+- [Phase 06-legacy-layout-repair]: Repair reuses the same symbolic manifest writer as init, mutates only the authoritative repo-local metadata, and preserves the repo-local state ignore rule.
 
 ### Pending Todos
 
-- Close out milestone `0.1.0-rc.2`
+- Start the next milestone with `/gsd-new-milestone`
 
 ### Blockers/Concerns
 
-- No current blockers; the roadmap is complete and the next step is milestone completion or audit.
+- No current blockers; the shipped milestone is archived and the roadmap is idle until the next milestone is defined.
 
 ### Roadmap Evolution
 
-- Phase 6 added: Add a narrow repo-local repair flow for legacy layouts in milestone `0.1.0-rc.2`
+- `0.1.0-rc.2` archived as a one-phase milestone focused on repo-local legacy layout repair.
 
 ## Session Continuity
 
-Last session: 2026-04-07T14:00:00Z
-Stopped at: Completed Phase 06-legacy-layout-repair
-Resume file: .planning/phases/06-legacy-layout-repair/06-VERIFICATION.md
+Last session: 2026-04-07T08:07:00Z
+Stopped at: Archived milestone v0.1.0-rc.2
+Resume file: .planning/milestones/v0.1.0-rc.2-ROADMAP.md
