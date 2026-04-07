@@ -81,8 +81,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Align init/default selection behavior with the approved design
-- [ ] 05-02: Add regression, precedence, and migration-oriented verification coverage
+- [ ] 05-01-PLAN.md — Prove the focused default-selection precedence set and mixed compatibility stance
+- [ ] 05-02-PLAN.md — Close the layered rollout matrix, document the legacy boundary, and verify the full suite
 
 ## Progress
 
