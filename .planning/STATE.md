@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_execute
-stopped_at: Planned Phase 05-rollout-verification
-last_updated: "2026-04-07T03:38:29Z"
+stopped_at: Completed 05-rollout-verification-01-PLAN.md
+last_updated: "2026-04-07T03:44:03Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 10
-  completed_plans: 8
-  percent: 80
+  completed_plans: 9
+  percent: 90
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-06)
 ## Current Position
 
 Phase: 05 (rollout-verification) — READY TO EXECUTE
-Plan set: 2 plans ready
-Status: Ready for Phase 05 execution
+Plan: 1 of 2 complete
+Status: Wave 2 ready to execute
 Last activity: 2026-04-07
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -48,7 +48,7 @@ Progress: [████████░░] 80%
 | 02-resolution-core | 2 | 18 min | 9 min |
 | 03-authority-and-safety | 2 | 19m22s | 9m41s |
 | 04-command-ux-and-migration-help | 2 | 30m21s | 15m10s |
-| 05-rollout-verification | 2 | - | - |
+| 05-rollout-verification | 2 | 23m | 23m |
 
 **Recent Trend:**
 
@@ -61,6 +61,7 @@ Progress: [████████░░] 80%
 | Phase 03-authority-and-safety P02 | 13m | 3 tasks | 8 files |
 | Phase 04-command-ux-and-migration-help P01 | 12m34s | 2 tasks | 5 files |
 | Phase 04-command-ux-and-migration-help P02 | 17m47s | 2 tasks | 8 files |
+| Phase 05-rollout-verification P01 | 23m | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Recent decisions affecting current work:
 - [Phase 04-command-ux-and-migration-help]: Repo-local `.gitignore` updates remain authoritative and are mentioned only when init actually changed the file.
 - [Phase 04-command-ux-and-migration-help]: README documentation now leads with the default repo-local XDG path before describing the `home` alternative, doctor workflows, and precedence tables.
 - [Phase 04-command-ux-and-migration-help]: Phase verification passed for doctor inspection, migration prompts, init layout reporting, repo-state ignore behavior, and default-first operator documentation.
+- [Phase 05-rollout-verification]: The focused precedence set is now locked in tests for repo/global init defaults, `[repo.init]`, `CHANGES_HOME`, XDG env signals, and explicit flag priority.
+- [Phase 05-rollout-verification]: Mixed rollout compatibility is now explicit in tests: manifest-backed repos operate normally, while legacy repos fail cleanly and remain diagnosable through `doctor`.
 
 ### Pending Todos
 
@@ -103,10 +106,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Phase 05 execution is the next ready step.
+- No current blockers; Phase 05 Plan 02 is the next ready execution target.
 
 ## Session Continuity
 
 Last session: 2026-04-07T02:54:05.043Z
-Stopped at: Planned Phase 05-rollout-verification
+Stopped at: Completed 05-rollout-verification-01-PLAN.md
 Resume file: .planning/phases/05-rollout-verification/05-CONTEXT.md

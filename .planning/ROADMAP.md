@@ -81,7 +81,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Prove the focused default-selection precedence set and mixed compatibility stance
+- [x] 05-01-PLAN.md — Prove the focused default-selection precedence set and mixed compatibility stance
 - [ ] 05-02-PLAN.md — Close the layered rollout matrix, document the legacy boundary, and verify the full suite
 
 ## Progress
