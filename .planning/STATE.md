@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.0-rc.2
 milestone_name: legacy-layout-repair
-status: ready_to_execute
-stopped_at: Planned Phase 6
-last_updated: "2026-04-07T13:15:00Z"
+status: planning
+stopped_at: Completed Phase 06-legacy-layout-repair
+last_updated: "2026-04-07T14:00:00Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 1
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 6 ready to execute
+**Current focus:** Milestone closeout
 
 ## Current Position
 
-Phase: 6 — Legacy Layout Repair
-Plan: 06-01
-Status: Ready to execute
+Phase set: All roadmap phases complete
+Plan: All 1 plans complete
+Status: Ready for milestone completion or audit
 Last activity: 2026-04-07
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -105,11 +105,11 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Execute Phase 6: Legacy Layout Repair
+- Close out milestone `0.1.0-rc.2`
 
 ### Blockers/Concerns
 
-- No current blockers; the next step is planning and executing Phase 6 for repo-local legacy repair.
+- No current blockers; the roadmap is complete and the next step is milestone completion or audit.
 
 ### Roadmap Evolution
 
@@ -117,6 +117,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-07T13:15:00Z
-Stopped at: Planned Phase 6
-Resume file: .planning/phases/06-legacy-layout-repair/06-01-PLAN.md
+Last session: 2026-04-07T14:00:00Z
+Stopped at: Completed Phase 06-legacy-layout-repair
+Resume file: .planning/phases/06-legacy-layout-repair/06-VERIFICATION.md

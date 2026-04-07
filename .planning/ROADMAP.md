@@ -8,7 +8,7 @@ This milestone closes the most immediate operator gap left by `0.1.0-rc.1`: exis
 
 ## Phases
 
-- [ ] **Phase 6: Legacy Layout Repair** - Add a narrow repair command flow for repo-local legacy layouts and verify the repaired repo becomes operational without manual manifest edits
+- [x] **Phase 6: Legacy Layout Repair** - Add a narrow repair command flow for repo-local legacy layouts and verify the repaired repo becomes operational without manual manifest edits (completed 2026-04-07)
 
 ## Phase Details
 
@@ -23,7 +23,7 @@ This milestone closes the most immediate operator gap left by `0.1.0-rc.1`: exis
 **Plans**: 1 plan
 
 Plans:
-- [ ] 06-01-PLAN.md — Add the repo-local doctor repair flow, manifest stamping, CLI/operator guidance, and regression coverage
+- [x] 06-01-PLAN.md — Add the repo-local doctor repair flow, manifest stamping, CLI/operator guidance, and regression coverage
 
 ## Shipped Milestones
 
@@ -36,4 +36,4 @@ Phase 6 executes after the shipped `0.1.0-rc.1` milestone.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Legacy Layout Repair | 0/1 | Not started | — |
+| 6. Legacy Layout Repair | 1/1 | Complete | 2026-04-07 |
