@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 04-command-ux-and-migration-help-02-PLAN.md
+status: planning
+stopped_at: Completed Phase 04-command-ux-and-migration-help
 last_updated: "2026-04-07T03:20:03Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
   completed_plans: 8
   percent: 100
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 04 — command-ux-and-migration-help
+**Current focus:** Phase 05 — rollout-verification
 
 ## Current Position
 
-Phase: 04 (command-ux-and-migration-help) — EXECUTING
-Plan: 2 of 2
-Status: Completed, awaiting phase verification
+Phase: 05 (rollout-verification) — READY FOR DISCUSSION
+Plan: Not planned yet
+Status: Waiting for Phase 05 discuss/planning
 Last activity: 2026-04-07
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Recent decisions affecting current work:
 - [Phase 04-command-ux-and-migration-help]: Repo and global init now share the approved minimal `--layout` and `--home` grammar and report explicit resolved paths on success.
 - [Phase 04-command-ux-and-migration-help]: Repo-local `.gitignore` updates remain authoritative and are mentioned only when init actually changed the file.
 - [Phase 04-command-ux-and-migration-help]: README documentation now leads with the default repo-local XDG path before describing the `home` alternative, doctor workflows, and precedence tables.
+- [Phase 04-command-ux-and-migration-help]: Phase verification passed for doctor inspection, migration prompts, init layout reporting, repo-state ignore behavior, and default-first operator documentation.
 
 ### Pending Todos
 
@@ -101,10 +102,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Phase 04 is ready for final verification and closure.
+- No current blockers; Phase 05 discuss/planning is the next ready step.
 
 ## Session Continuity
 
 Last session: 2026-04-07T02:54:05.043Z
-Stopped at: Completed 04-command-ux-and-migration-help-02-PLAN.md
+Stopped at: Completed Phase 04-command-ux-and-migration-help
 Resume file: None
