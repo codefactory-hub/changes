@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-04-07T01:49:46.166Z"
+status: ready_to_discuss
+stopped_at: Phase 3 verified
+last_updated: "2026-04-07T02:00:00Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 6
   completed_plans: 6
-  percent: 100
+  percent: 60
 ---
 
 # Project State
@@ -21,24 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 03 — authority-and-safety
+**Current focus:** Phase 4: Command UX and Migration Help ready for discussion
 
 ## Current Position
 
-Phase: 03 (authority-and-safety) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
-Last activity: 2026-04-07
+Phase: 4 of 5 (Command UX and Migration Help)
+Plan: Not started
+Status: Ready to discuss
+Last activity: 2026-04-07 -- Phase 3 verified and complete
 
-Progress: [████████░░] 83%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 6 min
-- Total execution time: 0.5 hours
+- Total execution time: 0.7 hours
 
 **By Phase:**
 
@@ -46,12 +46,12 @@ Progress: [████████░░] 83%
 |-------|-------|-------|----------|
 | 01-layout-proposal | 2 | 6 min | 3 min |
 | 02-resolution-core | 2 | 18 min | 9 min |
-| 03-authority-and-safety | 1 | 6m22s | 6m22s |
+| 03-authority-and-safety | 2 | 19m22s | 9m41s |
 
 **Recent Trend:**
 
-- Last 5 plans: 3 min, 3 min, 10 min, 8 min, 6 min
-- Trend: Stable on implementation-heavy plans
+- Last 5 plans: 3 min, 10 min, 8 min, 6 min, 13 min
+- Trend: Stable on implementation-heavy plans with longer end-to-end wiring work
 
 | Phase 02 P01 | 10m17s | 2 tasks | 5 files |
 | Phase 02 P02 | 508 | 3 tasks | 7 files |
@@ -83,6 +83,8 @@ Recent decisions affecting current work:
 - [Phase 03-authority-and-safety]: Load remains a compatibility wrapper over LoadWithAuthority so existing callers still compile while warning-aware flows opt in explicitly.
 - [Phase 03-authority-and-safety]: Initialize only treats genuinely uninitialized global authority as 'no defaults'; ambiguous, legacy-only, and invalid global states now surface typed authority errors.
 - [Phase 03-authority-and-safety]: Authority warning presentation stays in internal/cli, with repo paths rendered relative to the repo root and global paths left absolute.
+- [Phase 03-authority-and-safety]: Ordinary commands may proceed with one authoritative layout plus legacy-only or invalid siblings, but they surface concise stderr warnings for cleanup.
+- [Phase 03-authority-and-safety]: Every managed write path rechecks repo authority immediately before mutating disk so writes stay single-target.
 
 ### Pending Todos
 
@@ -90,10 +92,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Plan 03-02 can build on the committed authority helper surface.
+- No current blockers; Phase 3 is complete and the project is ready to discuss Phase 4.
 
 ## Session Continuity
 
-Last session: 2026-04-07T01:49:46.162Z
-Stopped at: Completed 03-02-PLAN.md
-Resume file: None
+Last session: 2026-04-07T02:00:00Z
+Stopped at: Phase 3 verified
+Resume file: .planning/ROADMAP.md
