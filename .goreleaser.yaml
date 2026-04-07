@@ -4,7 +4,7 @@ project_name: changes
 
 before:
   hooks:
-    - sh -c 'test -f .dist/release-notes.md || mkdir -p .dist && printf "# %s\n\nRelease notes were not generated yet.\n" "${GORELEASER_CURRENT_TAG:-changes}" > .dist/release-notes.md'
+    - sh -c 'version="${GORELEASER_CURRENT_TAG:-changes}"; version="${version#v}"; path=".local/share/changes/releases/changes-${version}+github_release.md"; if [ ! -f "${path}" ]; then mkdir -p "$(dirname "${path}")"; printf "# %s\n\nRelease notes were not generated yet.\n" "${GORELEASER_CURRENT_TAG:-changes}" > "${path}"; fi'
 
 builds:
   - id: changes

@@ -28,12 +28,16 @@ jobs:
         shell: bash
         run: ./scripts/prepare-release-notes.sh "${GITHUB_REF_NAME}"
 
+      - name: Capture release version
+        shell: bash
+        run: echo "RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes .dist/release-notes.md
+          args: release --clean --release-notes .local/share/changes/releases/changes-${{ env.RELEASE_VERSION }}+github_release.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHANGES_GITHUB_OWNER: ${{ vars.CHANGES_GITHUB_OWNER }}
