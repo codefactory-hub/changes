@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -179,6 +180,135 @@ func TestLoadReturnsInitHintForUninitializedRepoLayout(t *testing.T) {
 	}
 }
 
+func TestLoadWithAuthorityReturnsWarningForLegacySibling(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := Default()
+	cfg.Project.Name = "authoritative-xdg"
+
+	if err := writeManagedRepoConfig(t, repoRoot, StyleXDG, cfg); err != nil {
+		t.Fatalf("write managed config: %v", err)
+	}
+	if err := writeLegacyRepoConfig(t, repoRoot, StyleHome, Default()); err != nil {
+		t.Fatalf("write legacy sibling config: %v", err)
+	}
+
+	loaded, check, err := LoadWithAuthority(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadWithAuthority returned error: %v", err)
+	}
+	if loaded.Project.Name != "authoritative-xdg" {
+		t.Fatalf("project name = %q, want authoritative-xdg", loaded.Project.Name)
+	}
+	if check.Authoritative == nil || check.Authoritative.Style != StyleXDG {
+		t.Fatalf("authoritative candidate = %#v, want xdg", check.Authoritative)
+	}
+	if len(check.Warnings) != 1 {
+		t.Fatalf("warning count = %d, want 1", len(check.Warnings))
+	}
+	if check.Warnings[0].Status != StatusLegacyOnly || check.Warnings[0].Style != StyleHome {
+		t.Fatalf("warning = %#v, want legacy-only home sibling", check.Warnings[0])
+	}
+}
+
+func TestLoadWithAuthorityReturnsWarningForInvalidSibling(t *testing.T) {
+	repoRoot := t.TempDir()
+	cfg := Default()
+	cfg.Project.Name = "authoritative-home"
+
+	if err := writeManagedRepoConfig(t, repoRoot, StyleHome, cfg); err != nil {
+		t.Fatalf("write managed config: %v", err)
+	}
+	if err := writeInvalidRepoManifest(t, repoRoot, StyleXDG); err != nil {
+		t.Fatalf("write invalid sibling manifest: %v", err)
+	}
+
+	loaded, check, err := LoadWithAuthority(repoRoot)
+	if err != nil {
+		t.Fatalf("LoadWithAuthority returned error: %v", err)
+	}
+	if loaded.Project.Name != "authoritative-home" {
+		t.Fatalf("project name = %q, want authoritative-home", loaded.Project.Name)
+	}
+	if check.Authoritative == nil || check.Authoritative.Style != StyleHome {
+		t.Fatalf("authoritative candidate = %#v, want home", check.Authoritative)
+	}
+	if len(check.Warnings) != 1 {
+		t.Fatalf("warning count = %d, want 1", len(check.Warnings))
+	}
+	if check.Warnings[0].Status != StatusInvalid || check.Warnings[0].Style != StyleXDG {
+		t.Fatalf("warning = %#v, want invalid xdg sibling", check.Warnings[0])
+	}
+}
+
+func TestLoadWithAuthorityReturnsAmbiguousAuthorityError(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	if err := writeManagedRepoConfig(t, repoRoot, StyleXDG, Default()); err != nil {
+		t.Fatalf("write xdg config: %v", err)
+	}
+	if err := writeManagedRepoConfig(t, repoRoot, StyleHome, Default()); err != nil {
+		t.Fatalf("write home config: %v", err)
+	}
+
+	_, _, err := LoadWithAuthority(repoRoot)
+	if err == nil {
+		t.Fatalf("LoadWithAuthority returned nil error")
+	}
+
+	var authorityErr *AuthorityError
+	if !errors.As(err, &authorityErr) {
+		t.Fatalf("LoadWithAuthority error = %v, want AuthorityError", err)
+	}
+	if authorityErr.Status != StatusAmbiguous {
+		t.Fatalf("authority status = %s, want %s", authorityErr.Status, StatusAmbiguous)
+	}
+}
+
+func TestRequireRepoWriteAuthorityRejectsLegacyOnlyRepo(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	if err := writeLegacyRepoConfig(t, repoRoot, StyleXDG, Default()); err != nil {
+		t.Fatalf("write legacy repo config: %v", err)
+	}
+
+	_, err := RequireRepoWriteAuthority(repoRoot)
+	if err == nil {
+		t.Fatalf("RequireRepoWriteAuthority returned nil error")
+	}
+
+	var authorityErr *AuthorityError
+	if !errors.As(err, &authorityErr) {
+		t.Fatalf("RequireRepoWriteAuthority error = %v, want AuthorityError", err)
+	}
+	if authorityErr.Status != StatusLegacyOnly {
+		t.Fatalf("authority status = %s, want %s", authorityErr.Status, StatusLegacyOnly)
+	}
+}
+
+func TestRequireRepoWriteAuthorityRejectsAmbiguousRepo(t *testing.T) {
+	repoRoot := t.TempDir()
+
+	if err := writeManagedRepoConfig(t, repoRoot, StyleXDG, Default()); err != nil {
+		t.Fatalf("write xdg config: %v", err)
+	}
+	if err := writeManagedRepoConfig(t, repoRoot, StyleHome, Default()); err != nil {
+		t.Fatalf("write home config: %v", err)
+	}
+
+	_, err := RequireRepoWriteAuthority(repoRoot)
+	if err == nil {
+		t.Fatalf("RequireRepoWriteAuthority returned nil error")
+	}
+
+	var authorityErr *AuthorityError
+	if !errors.As(err, &authorityErr) {
+		t.Fatalf("RequireRepoWriteAuthority error = %v, want AuthorityError", err)
+	}
+	if authorityErr.Status != StatusAmbiguous {
+		t.Fatalf("authority status = %s, want %s", authorityErr.Status, StatusAmbiguous)
+	}
+}
+
 func TestLoadAppliesDefaultVersioningWhenMissing(t *testing.T) {
 	repoRoot := t.TempDir()
 	raw := []byte("[project]\nname = \"changes\"\nchangelog_file = \"CHANGELOG.md\"\ninitial_version = \"0.1.0\"\n")
@@ -279,6 +409,24 @@ func writeManagedRepoConfigBytes(t *testing.T, repoRoot string, style Style, raw
 		return err
 	}
 	return os.WriteFile(path, raw, 0o644)
+}
+
+func writeLegacyRepoConfig(t *testing.T, repoRoot string, style Style, cfg Config) error {
+	t.Helper()
+	path := repoConfigPathForStyle(repoRoot, style)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return Write(path, cfg)
+}
+
+func writeInvalidRepoManifest(t *testing.T, repoRoot string, style Style) error {
+	t.Helper()
+	path := repoLayoutManifestPath(repoRoot, style)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte("schema_version = 1\nscope = \"repo\"\nstyle = \"wrong\"\n"), 0o644)
 }
 
 func writeRepoLayoutManifest(t *testing.T, repoRoot string, style Style) error {
