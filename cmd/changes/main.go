@@ -14,11 +14,10 @@ var (
 )
 
 func main() {
-	_ = version
-	_ = commit
-	_ = date
-
 	app := cli.NewApp(os.Stdout, os.Stderr)
+	app.Version = version
+	app.Commit = commit
+	app.Date = date
 	if err := app.Run(context.Background(), os.Args[1:]); err != nil {
 		os.Exit(1)
 	}

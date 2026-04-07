@@ -28,6 +28,9 @@ type App struct {
 	Random   io.Reader
 	IsTTY    func() bool
 	EditFile func(path string) error
+	Version  string
+	Commit   string
+	Date     string
 }
 
 func NewApp(stdout, stderr io.Writer) *App {
@@ -36,6 +39,9 @@ func NewApp(stdout, stderr io.Writer) *App {
 		Stderr: stderr,
 		Stdin:  os.Stdin,
 		Now:    time.Now,
+		Version: "dev",
+		Commit:  "unknown",
+		Date:    "unknown",
 	}
 	app.IsTTY = app.defaultIsTTY
 	app.EditFile = app.defaultEditFile
@@ -45,6 +51,10 @@ func NewApp(stdout, stderr io.Writer) *App {
 func (a *App) Run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return a.fail(fmt.Errorf("usage: changes <command>"))
+	}
+	if isVersionArg(args[0]) && len(args) == 1 {
+		a.printVersion()
+		return nil
 	}
 	if isHelpArg(args[0]) {
 		a.printHelp(args[1:])
@@ -57,6 +67,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	var err error
 	switch args[0] {
+	case "version":
+		err = a.runVersion(args[1:])
 	case "init":
 		err = a.runInit(ctx, args[1:])
 	case "create":
@@ -76,6 +88,18 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return a.fail(err)
 	}
+	return nil
+}
+
+func (a *App) runVersion(args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"version"})
+		return nil
+	}
+	if len(args) > 0 {
+		return fmt.Errorf("usage: changes version")
+	}
+	a.printVersion()
 	return nil
 }
 
@@ -662,6 +686,10 @@ func wantsHelp(args []string) bool {
 	return false
 }
 
+func isVersionArg(arg string) bool {
+	return arg == "--version" || arg == "-version"
+}
+
 func (a *App) printHelp(path []string) {
 	var body string
 	switch strings.Join(path, " ") {
@@ -673,6 +701,7 @@ func (a *App) printHelp(path []string) {
 	  changes <command> [options]
 
 Commands:
+  version
   init
   create
   status
@@ -696,6 +725,14 @@ Usage:
   changes init global [--layout xdg|home] [--home PATH]
 
 Initialize global config, data, and state directories plus the layout manifest.
+`)
+	case "version":
+		body = strings.TrimSpace(`
+Usage:
+  changes --version
+  changes version
+
+Show the CLI build version.
 `)
 	case "create":
 		body = strings.TrimSpace(`
@@ -788,6 +825,14 @@ Use "changes help" to see the available commands.
 `)
 	}
 	_, _ = fmt.Fprintln(a.Stdout, body)
+}
+
+func (a *App) printVersion() {
+	version := strings.TrimSpace(a.Version)
+	if version == "" {
+		version = "dev"
+	}
+	_, _ = fmt.Fprintf(a.Stdout, "changes %s\n", version)
 }
 
 func renderRecommendationExplanation(w io.Writer, recommendation semverpolicy.Recommendation) {

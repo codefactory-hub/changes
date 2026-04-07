@@ -257,7 +257,7 @@ func TestAppHelpSurface(t *testing.T) {
 	if !strings.Contains(rootHelp, "Usage:") || !strings.Contains(rootHelp, "changes <command> [options]") {
 		t.Fatalf("root help missing usage:\n%s", rootHelp)
 	}
-	if !strings.Contains(rootHelp, "create") || !strings.Contains(rootHelp, "render profiles") || !strings.Contains(rootHelp, "doctor") {
+	if !strings.Contains(rootHelp, "create") || !strings.Contains(rootHelp, "render profiles") || !strings.Contains(rootHelp, "doctor") || !strings.Contains(rootHelp, "version") {
 		t.Fatalf("root help missing commands:\n%s", rootHelp)
 	}
 	if strings.Contains(rootHelp, "version next") {
@@ -310,6 +310,45 @@ func TestAppHelpSurface(t *testing.T) {
 	err = app.Run(context.Background(), []string{"changelog", "rebuild"})
 	if err == nil || !strings.Contains(stderr.String(), `unknown command "changelog"`) {
 		t.Fatalf("changelog should be rejected:\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
+	}
+}
+
+func TestAppVersionSurface(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Version = "0.1.0"
+	app.Commit = "abc123"
+	app.Date = "2026-04-07T12:00:00Z"
+
+	if err := app.Run(context.Background(), []string{"--version"}); err != nil {
+		t.Fatalf("--version returned error: %v", err)
+	}
+	if got := stdout.String(); got != "changes 0.1.0\n" {
+		t.Fatalf("--version output = %q, want %q", got, "changes 0.1.0\n")
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"version"}); err != nil {
+		t.Fatalf("version returned error: %v", err)
+	}
+	if got := stdout.String(); got != "changes 0.1.0\n" {
+		t.Fatalf("version output = %q, want %q", got, "changes 0.1.0\n")
+	}
+}
+
+func TestAppVersionDefaultsToDev(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+
+	if err := app.Run(context.Background(), []string{"--version"}); err != nil {
+		t.Fatalf("--version returned error: %v", err)
+	}
+	if got := stdout.String(); got != "changes dev\n" {
+		t.Fatalf("--version output = %q, want %q", got, "changes dev\n")
 	}
 }
 
