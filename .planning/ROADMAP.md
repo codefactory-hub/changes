@@ -67,8 +67,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Implement CLI command surfaces for layout inspection and migration prompt generation
-- [ ] 04-02: Document the commands, defaults, precedence, and merge/migration guidance
+- [ ] 04-01-PLAN.md — Implement the `doctor` inspection and migration-prompt command workflow
+- [ ] 04-02-PLAN.md — Add init layout UX, explicit path reporting, and default-first operator docs
 
 ### Phase 5: Rollout Verification
 **Goal**: Make the new layout model the default-safe behavior and verify compatibility across existing and new layouts
