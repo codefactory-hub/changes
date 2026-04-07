@@ -111,6 +111,7 @@ func (a *App) runInit(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	a.printAuthorityWarnings(repoRoot, result.AuthorityWarnings)
 
 	_, _ = fmt.Fprintf(a.Stdout, "initialized %s\n", result.RepoRoot)
 	if strings.TrimSpace(result.PromptPath) != "" {
@@ -144,6 +145,7 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	a.printAuthorityWarnings(repoRoot, result.AuthorityWarnings)
 
 	_, _ = fmt.Fprintf(a.Stdout, "Current version: %s\n", result.CurrentVersionLabel)
 	_, _ = fmt.Fprintf(a.Stdout, "Current version source: %s\n", result.CurrentVersionSource)
@@ -244,6 +246,7 @@ func (a *App) runRelease(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	a.printAuthorityWarnings(repoRoot, plan.AuthorityWarnings)
 
 	if accept && plan.ChosenBump == versioning.BumpNone {
 		return fmt.Errorf("release: no version bump was inferred; use --override --bump or --override --version")
@@ -318,6 +321,7 @@ func (a *App) runRender(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	a.printAuthorityWarnings(repoRoot, result.AuthorityWarnings)
 
 	if strings.TrimSpace(outputPath) != "" {
 		if err := os.WriteFile(outputPath, []byte(result.Content), 0o644); err != nil {
@@ -345,10 +349,11 @@ func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := config.Load(repoRoot)
+	cfg, authorityCheck, err := config.LoadWithAuthority(repoRoot)
 	if err != nil {
 		return err
 	}
+	a.printAuthorityWarnings(repoRoot, authorityCheck.Warnings)
 
 	packs, err := render.AvailablePacks(cfg)
 	if err != nil {
@@ -376,6 +381,34 @@ func (a *App) repoRoot(ctx context.Context) (string, error) {
 func (a *App) fail(err error) error {
 	_, _ = fmt.Fprintf(a.Stderr, "error: %v\n", err)
 	return err
+}
+
+func (a *App) printAuthorityWarnings(repoRoot string, warnings []config.AuthorityWarning) {
+	for _, warning := range warnings {
+		path := warning.Path
+		if warning.Scope == config.ScopeRepo && strings.TrimSpace(repoRoot) != "" {
+			path = repoRelativePath(repoRoot, warning.Path)
+		}
+		_, _ = fmt.Fprintf(
+			a.Stderr,
+			"warning: %s authority found %s %s sibling at %s\n",
+			warning.Scope,
+			authorityWarningStatusText(warning.Status),
+			warning.Style,
+			path,
+		)
+	}
+}
+
+func authorityWarningStatusText(status config.ResolutionStatus) string {
+	switch status {
+	case config.StatusLegacyOnly:
+		return "legacy-only"
+	case config.StatusInvalid:
+		return "invalid-manifest"
+	default:
+		return string(status)
+	}
 }
 
 func isHelpArg(arg string) bool {

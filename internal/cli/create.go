@@ -116,8 +116,12 @@ func (a *App) runCreate(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := config.Load(repoRoot)
+	cfg, authorityCheck, err := config.LoadWithAuthority(repoRoot)
 	if err != nil {
+		return err
+	}
+	a.printAuthorityWarnings(repoRoot, authorityCheck.Warnings)
+	if _, err := config.RequireRepoWriteAuthority(repoRoot); err != nil {
 		return err
 	}
 

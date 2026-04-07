@@ -642,6 +642,7 @@ func TestAppStatusPrintsAuthorityWarningToStderr(t *testing.T) {
 		return time.Date(2026, 4, 5, 9, 45, 0, 0, time.UTC)
 	}
 	app.Random = bytes.NewReader([]byte{1, 2, 3, 4})
+	app.IsTTY = func() bool { return false }
 
 	if err := app.Run(context.Background(), []string{"init"}); err != nil {
 		t.Fatalf("init returned error: %v", err)
@@ -676,6 +677,7 @@ func TestAppCreatePrintsAuthorityWarningToStderr(t *testing.T) {
 		return time.Date(2026, 4, 5, 9, 50, 0, 0, time.UTC)
 	}
 	app.Random = bytes.NewReader([]byte{5, 6, 7, 8})
+	app.IsTTY = func() bool { return false }
 
 	if err := app.Run(context.Background(), []string{"init"}); err != nil {
 		t.Fatalf("init returned error: %v", err)
@@ -746,6 +748,7 @@ func TestAppRenderProfilesPrintsAuthorityWarningToStderr(t *testing.T) {
 		return time.Date(2026, 4, 5, 10, 5, 0, 0, time.UTC)
 	}
 	app.Random = bytes.NewReader([]byte{1, 3, 5, 7})
+	app.IsTTY = func() bool { return false }
 
 	if err := app.Run(context.Background(), []string{"init"}); err != nil {
 		t.Fatalf("init returned error: %v", err)
@@ -787,6 +790,7 @@ func TestAppCreateFailsWithTerseAmbiguousDoctorHint(t *testing.T) {
 		return time.Date(2026, 4, 5, 10, 10, 0, 0, time.UTC)
 	}
 	app.Random = bytes.NewReader([]byte{2, 4, 6, 8})
+	app.IsTTY = func() bool { return false }
 
 	err := app.Run(context.Background(), []string{"create", "--behavior", "fix", "Fix the parser edge case."})
 	if err == nil {
@@ -818,6 +822,7 @@ func TestAppInitPrintsGlobalAuthorityWarningToStderr(t *testing.T) {
 		return time.Date(2026, 4, 5, 10, 15, 0, 0, time.UTC)
 	}
 	app.Random = bytes.NewReader([]byte{1, 1, 2, 3})
+	app.IsTTY = func() bool { return false }
 
 	if err := app.Run(context.Background(), []string{"init"}); err != nil {
 		t.Fatalf("init returned error: %v\nstderr=%s", err, stderr.String())
@@ -851,6 +856,7 @@ func TestAppInitFailsWithTerseAmbiguousGlobalDoctorHint(t *testing.T) {
 		return time.Date(2026, 4, 5, 10, 20, 0, 0, time.UTC)
 	}
 	app.Random = bytes.NewReader([]byte{4, 3, 2, 1})
+	app.IsTTY = func() bool { return false }
 
 	err := app.Run(context.Background(), []string{"init"})
 	if err == nil {
