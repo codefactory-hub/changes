@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_discuss
+status: ready_to_execute
 stopped_at: Phase 4 context gathered
-last_updated: "2026-04-07T02:13:49.337Z"
-last_activity: 2026-04-07 -- Phase 4 context gathered
+last_updated: "2026-04-07T02:35:53.414Z"
+last_activity: 2026-04-07 -- Phase 04 planning complete
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 6
+  total_plans: 8
   completed_plans: 6
-  percent: 60
+  percent: 75
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 4: Command UX and Migration Help ready for discussion
+**Current focus:** Phase 4: Command UX and Migration Help planned and verified
 
 ## Current Position
 
 Phase: 4 of 5 (Command UX and Migration Help)
-Plan: Not started
-Status: Ready to discuss
-Last activity: 2026-04-07 -- Phase 3 verified and complete
+Plan: 2 of 2 in current phase
+Status: Ready to execute
+Last activity: 2026-04-07 -- Phase 04 planning complete
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 75%
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Progress: [██████░░░░] 60%
 | 01-layout-proposal | 2 | 6 min | 3 min |
 | 02-resolution-core | 2 | 18 min | 9 min |
 | 03-authority-and-safety | 2 | 19m22s | 9m41s |
+| 04-command-ux-and-migration-help | 2 | - | - |
 
 **Recent Trend:**
 
@@ -92,7 +93,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Phase 3 is complete and the project is ready to discuss Phase 4.
+- No current blockers; Phase 4 is ready to execute from the committed plan set.
 
 ## Session Continuity
 
