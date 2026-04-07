@@ -83,6 +83,39 @@ func TestResolveManifestRejectsUnsupportedKeys(t *testing.T) {
 	}
 }
 
+func TestResolveManifestRejectsUnsupportedSchemaVersion(t *testing.T) {
+	repoRoot := t.TempDir()
+	manifestPath := filepath.Join(repoRoot, ".config", "changes", "layout.toml")
+	raw := []byte("schema_version = 2\nscope = \"repo\"\nstyle = \"xdg\"\n\n[layout]\nroot = \"$REPO_ROOT\"\nconfig = \"$REPO_ROOT/.config/changes\"\ndata = \"$REPO_ROOT/.local/share/changes\"\nstate = \"$REPO_ROOT/.local/state/changes\"\n")
+	writeTestFile(t, manifestPath, raw)
+
+	before, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read manifest before resolve: %v", err)
+	}
+
+	resolution, err := ResolveRepo(ResolveOptions{RepoRoot: repoRoot})
+	if err != nil {
+		t.Fatalf("ResolveRepo returned error: %v", err)
+	}
+
+	xdg := findCandidateByStyle(t, resolution, StyleXDG)
+	if xdg.Status != StatusInvalid {
+		t.Fatalf("candidate status = %q, want %q", xdg.Status, StatusInvalid)
+	}
+	if resolution.Status != StatusInvalid {
+		t.Fatalf("scope status = %q, want %q", resolution.Status, StatusInvalid)
+	}
+
+	after, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read manifest after resolve: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("manifest bytes changed during resolve")
+	}
+}
+
 func TestResolveRepoManifestRejectsEscapingPaths(t *testing.T) {
 	repoRoot := t.TempDir()
 	manifestPath := filepath.Join(repoRoot, ".config", "changes", "layout.toml")
