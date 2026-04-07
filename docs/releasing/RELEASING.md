@@ -5,7 +5,7 @@ This repository is set up to publish tagged releases through GoReleaser and then
 ## Expected release flow
 
 1. Push a `v*` tag to this repository.
-2. The GitHub Actions workflow generates release notes.
+2. The GitHub Actions workflow reads the committed GitHub release markdown for that version.
 3. GoReleaser builds the `changes` binary for Linux, macOS, and Windows.
 4. GoReleaser publishes a GitHub Release and updates the internal Homebrew cask tap.
 
@@ -54,13 +54,25 @@ Set these as GitHub repository variables unless your hosting provider uses a dif
 
 ## Notes generation
 
-The workflow currently runs:
+Release automation expects the release commit to already contain:
 
 ```bash
-./scripts/prepare-release-notes.sh "${GITHUB_REF_NAME}"
+.local/share/changes/releases/changes-<version>+github_release.md
 ```
 
-If the repo has not been initialized for `changes` yet, or if it still has no final release record to render, the script writes a placeholder file so release automation stays coherent during bootstrap.
+For example, tag `v0.1.0` must have:
+
+```bash
+.local/share/changes/releases/changes-0.1.0+github_release.md
+```
+
+The release workflow validates that the committed file exists and passes it directly to GoReleaser. It does not regenerate release notes in CI, because mutating the checkout causes GoReleaser to fail its dirty-tree validation.
+
+Generate or refresh the committed file locally with:
+
+```bash
+./scripts/prepare-release-notes.sh "v0.1.0"
+```
 
 The dry-run workflow uses the same release-notes preparation path.
 
