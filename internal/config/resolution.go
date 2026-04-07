@@ -46,34 +46,7 @@ func resolveScope(scope Scope, opts ResolveOptions) (ScopeResolution, error) {
 		return ScopeResolution{}, err
 	}
 
-	resolution := ScopeResolution{
-		Scope:      scope,
-		Candidates: candidates,
-		Status:     summarizeScopeStatus(candidates),
-	}
-
-	if resolution.Status == StatusResolved {
-		for i := range resolution.Candidates {
-			if resolution.Candidates[i].Status == StatusResolved {
-				resolution.Authoritative = &resolution.Candidates[i]
-				resolution.Preferred = &resolution.Candidates[i]
-				break
-			}
-		}
-	}
-
-	if resolution.Preferred == nil {
-		if preferred := preferredStyle(scope, opts); preferred != "" {
-			for i := range resolution.Candidates {
-				if resolution.Candidates[i].Style == preferred {
-					resolution.Preferred = &resolution.Candidates[i]
-					break
-				}
-			}
-		}
-	}
-
-	return resolution, nil
+	return resolveScopeFromCandidates(scope, opts, candidates)
 }
 
 func inspectCandidates(scope Scope, opts ResolveOptions) ([]Candidate, error) {
@@ -219,14 +192,53 @@ func repoPaths(style Style, opts ResolveOptions) LayoutPaths {
 }
 
 func summarizeScopeStatus(candidates []Candidate) ResolutionStatus {
-	resolved := 0
+	groupCount, _ := operationalAuthorityGroupCount(candidates)
+	return summarizeScopeStatusWithGroupCount(candidates, groupCount)
+}
+
+func resolveScopeFromCandidates(scope Scope, opts ResolveOptions, candidates []Candidate) (ScopeResolution, error) {
+	groupCount, err := operationalAuthorityGroupCount(candidates)
+	if err != nil {
+		return ScopeResolution{}, err
+	}
+
+	resolution := ScopeResolution{
+		Scope:      scope,
+		Candidates: candidates,
+		Status:     summarizeScopeStatusWithGroupCount(candidates, groupCount),
+	}
+
+	group, err := authoritativeCandidateGroup(candidates)
+	if err != nil {
+		return ScopeResolution{}, err
+	}
+
+	if resolution.Status == StatusResolved && len(group) > 0 {
+		authoritativeIndex := pickAuthorityIndex(scope, opts, group, candidates)
+		resolution.Authoritative = &resolution.Candidates[authoritativeIndex]
+		resolution.Warnings = authorityWarnings(candidates)
+	}
+
+	if resolution.Authoritative != nil {
+		resolution.Preferred = resolution.Authoritative
+	} else if preferred := preferredStyle(scope, opts); preferred != "" {
+		for i := range resolution.Candidates {
+			if resolution.Candidates[i].Style == preferred {
+				resolution.Preferred = &resolution.Candidates[i]
+				break
+			}
+		}
+	}
+
+	return resolution, nil
+}
+
+func summarizeScopeStatusWithGroupCount(candidates []Candidate, groupCount int) ResolutionStatus {
 	legacy := 0
 	invalid := 0
 
 	for _, candidate := range candidates {
 		switch candidate.Status {
-		case StatusResolved:
-			resolved++
 		case StatusLegacyOnly:
 			legacy++
 		case StatusInvalid:
@@ -235,9 +247,9 @@ func summarizeScopeStatus(candidates []Candidate) ResolutionStatus {
 	}
 
 	switch {
-	case resolved > 1:
+	case groupCount > 1:
 		return StatusAmbiguous
-	case resolved == 1:
+	case groupCount == 1:
 		return StatusResolved
 	case invalid > 0:
 		return StatusInvalid
@@ -246,6 +258,79 @@ func summarizeScopeStatus(candidates []Candidate) ResolutionStatus {
 	default:
 		return StatusUninitialized
 	}
+}
+
+func operationalAuthorityGroupCount(candidates []Candidate) (int, error) {
+	groups, err := operationalAuthorityGroups(candidates)
+	if err != nil {
+		return 0, err
+	}
+	return len(groups), nil
+}
+
+func authoritativeCandidateGroup(candidates []Candidate) ([]int, error) {
+	groups, err := operationalAuthorityGroups(candidates)
+	if err != nil {
+		return nil, err
+	}
+	if len(groups) != 1 {
+		return nil, nil
+	}
+	for _, indexes := range groups {
+		return indexes, nil
+	}
+	return nil, nil
+}
+
+func operationalAuthorityGroups(candidates []Candidate) (map[string][]int, error) {
+	groups := make(map[string][]int)
+	for i, candidate := range candidates {
+		if candidate.Status != StatusResolved {
+			continue
+		}
+
+		key, err := candidateAuthorityKey(candidate)
+		if err != nil {
+			return nil, err
+		}
+		groups[key] = append(groups[key], i)
+	}
+	return groups, nil
+}
+
+func candidateAuthorityKey(candidate Candidate) (string, error) {
+	root := candidate.Paths.Root
+	if candidate.Manifest != nil && candidate.Manifest.Resolved.Root != "" {
+		root = candidate.Manifest.Resolved.Root
+	}
+	return canonicalPathForComparison(root)
+}
+
+func pickAuthorityIndex(scope Scope, opts ResolveOptions, group []int, candidates []Candidate) int {
+	if preferred := preferredStyle(scope, opts); preferred != "" {
+		for _, index := range group {
+			if candidates[index].Style == preferred {
+				return index
+			}
+		}
+	}
+	return group[0]
+}
+
+func authorityWarnings(candidates []Candidate) []AuthorityWarning {
+	warnings := make([]AuthorityWarning, 0)
+	for _, candidate := range candidates {
+		if candidate.Status != StatusLegacyOnly && candidate.Status != StatusInvalid {
+			continue
+		}
+		warnings = append(warnings, AuthorityWarning{
+			Scope:  candidate.Scope,
+			Style:  candidate.Style,
+			Status: candidate.Status,
+			Path:   candidate.Paths.Config,
+		})
+	}
+	return warnings
 }
 
 func preferredStyle(scope Scope, opts ResolveOptions) Style {

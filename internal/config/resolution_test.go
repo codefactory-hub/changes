@@ -241,7 +241,12 @@ func TestResolveRepoCollapsesEquivalentOperationalCandidates(t *testing.T) {
 	}
 
 	xdgPaths := repoPaths(StyleXDG, ResolveOptions{RepoRoot: repoReal})
-	homePaths := repoPaths(StyleHome, ResolveOptions{RepoRoot: repoAlias})
+	homePaths := LayoutPaths{
+		Root:   repoAlias,
+		Config: filepath.Join(repoAlias, "config"),
+		Data:   filepath.Join(repoAlias, "data"),
+		State:  filepath.Join(repoAlias, "state"),
+	}
 
 	resolution, err := resolveScopeFromCandidates(ScopeRepo, ResolveOptions{RepoRoot: repoReal}, []Candidate{
 		newResolvedCandidateForTest(StyleXDG, xdgPaths),

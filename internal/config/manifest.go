@@ -16,6 +16,8 @@ var (
 	symbolPattern            = regexp.MustCompile(`\$[A-Za-z_][A-Za-z0-9_.]*`)
 )
 
+const supportedLayoutSchemaVersion = 1
+
 type layoutDocument struct {
 	SchemaVersion int   `toml:"schema_version"`
 	Scope         Scope `toml:"scope"`
@@ -36,6 +38,9 @@ func loadLayoutManifest(path string, scope Scope, style Style, candidatePaths La
 	}
 	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
 		return nil, fmt.Errorf("%w: unsupported keys: %s", errInvalidLayoutManifest, joinKeys(undecoded))
+	}
+	if doc.SchemaVersion != supportedLayoutSchemaVersion {
+		return nil, fmt.Errorf("%w: unsupported schema_version %d", errInvalidLayoutManifest, doc.SchemaVersion)
 	}
 	if doc.Scope != scope {
 		return nil, fmt.Errorf("%w: scope %q does not match %q", errInvalidLayoutManifest, doc.Scope, scope)
