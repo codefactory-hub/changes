@@ -135,38 +135,34 @@ func ChangelogPath(repoRoot string, cfg Config) string {
 }
 
 func Load(repoRoot string) (Config, error) {
-	resolution, err := ResolveRepo(ResolveOptions{RepoRoot: repoRoot})
+	cfg, _, err := LoadWithAuthority(repoRoot)
 	if err != nil {
-		return Config{}, fmt.Errorf("load config: resolve repo layout: %w", err)
-	}
-
-	path, err := repoConfigPathForLoad(repoRoot, resolution)
-	if err != nil {
-		return Config{}, err
-	}
-
-	cfg := Default()
-	if _, err := os.Stat(path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return Config{}, fmt.Errorf("load config: %s does not exist; run `changes init` first", path)
+		var authorityErr *AuthorityError
+		if errors.As(err, &authorityErr) && authorityErr.Status == StatusUninitialized {
+			return Config{}, fmt.Errorf("load config: %s does not exist; run `changes init` first", filepath.Join(repoPaths(StyleXDG, ResolveOptions{RepoRoot: repoRoot}).Config, "config.toml"))
 		}
-		return Config{}, fmt.Errorf("load config: %w", err)
-	}
-
-	meta, err := toml.DecodeFile(path, &cfg)
-	if err != nil {
-		return Config{}, fmt.Errorf("decode config: %w", err)
-	}
-	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
-		return Config{}, fmt.Errorf("decode config: unsupported keys: %s", joinKeys(undecoded))
-	}
-
-	cfg.applyDefaults()
-	if err := cfg.Validate(); err != nil {
 		return Config{}, err
 	}
 
 	return cfg, nil
+}
+
+func LoadWithAuthority(repoRoot string) (Config, AuthorityCheck, error) {
+	check, err := resolveRepoAuthority(repoRoot)
+	if err != nil {
+		return Config{}, AuthorityCheck{}, err
+	}
+
+	cfg, err := loadConfigFile(filepath.Join(check.Authoritative.Paths.Config, "config.toml"))
+	if err != nil {
+		return Config{}, AuthorityCheck{}, err
+	}
+
+	return cfg, check, nil
+}
+
+func RequireRepoWriteAuthority(repoRoot string) (AuthorityCheck, error) {
+	return resolveRepoAuthority(repoRoot)
 }
 
 func repoCompatibilityPaths(repoRoot string) LayoutPaths {
@@ -176,22 +172,6 @@ func repoCompatibilityPaths(repoRoot string) LayoutPaths {
 		return resolution.Authoritative.Paths
 	}
 	return repoPaths(StyleXDG, opts)
-}
-
-func repoConfigPathForLoad(repoRoot string, resolution ScopeResolution) (string, error) {
-	switch resolution.Status {
-	case StatusResolved:
-		if resolution.Authoritative == nil {
-			return "", fmt.Errorf("load config: repo layout status %s", resolution.Status)
-		}
-		return filepath.Join(resolution.Authoritative.Paths.Config, "config.toml"), nil
-	case StatusUninitialized:
-		return "", fmt.Errorf("load config: %s does not exist; run `changes init` first", filepath.Join(repoPaths(StyleXDG, ResolveOptions{RepoRoot: repoRoot}).Config, "config.toml"))
-	case StatusLegacyOnly, StatusAmbiguous, StatusInvalid:
-		return "", fmt.Errorf("load config: repo layout status %s", resolution.Status)
-	default:
-		return "", fmt.Errorf("load config: repo layout status %s", resolution.Status)
-	}
 }
 
 func repoDataDir(repoRoot string, cfg Config) string {
@@ -412,4 +392,41 @@ func asStringMap(value any) (map[string]string, error) {
 		out[key] = text
 	}
 	return out, nil
+}
+
+func resolveRepoAuthority(repoRoot string) (AuthorityCheck, error) {
+	resolution, err := ResolveRepo(ResolveOptions{RepoRoot: repoRoot})
+	if err != nil {
+		return AuthorityCheck{}, fmt.Errorf("load config: resolve repo layout: %w", err)
+	}
+
+	check, err := CheckScopeAuthority(resolution)
+	if err != nil {
+		return AuthorityCheck{}, err
+	}
+	return check, nil
+}
+
+func loadConfigFile(path string) (Config, error) {
+	cfg := Default()
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Config{}, fmt.Errorf("load config: %s does not exist; run `changes init` first", path)
+		}
+		return Config{}, fmt.Errorf("load config: %w", err)
+	}
+
+	meta, err := toml.DecodeFile(path, &cfg)
+	if err != nil {
+		return Config{}, fmt.Errorf("decode config: %w", err)
+	}
+	if undecoded := meta.Undecoded(); len(undecoded) > 0 {
+		return Config{}, fmt.Errorf("decode config: unsupported keys: %s", joinKeys(undecoded))
+	}
+
+	cfg.applyDefaults()
+	if err := cfg.Validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
