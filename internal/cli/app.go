@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -61,6 +63,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		err = a.runCreate(ctx, args[1:])
 	case "status":
 		err = a.runStatus(ctx, args[1:])
+	case "doctor":
+		err = a.runDoctor(ctx, args[1:])
 	case "release":
 		err = a.runRelease(ctx, args[1:])
 	case "render":
@@ -173,6 +177,131 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 		}
 	}
 
+	return nil
+}
+
+func (a *App) runDoctor(ctx context.Context, args []string) error {
+	if wantsHelp(args) {
+		a.printHelp([]string{"doctor"})
+		return nil
+	}
+
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	var scope string
+	var explain bool
+	var jsonOutput bool
+	var migrationPrompt bool
+	var to string
+	var home string
+	var outputPath string
+
+	fs.StringVar(&scope, "scope", "", "Inspection scope")
+	fs.BoolVar(&explain, "explain", false, "Show candidate and warning detail")
+	fs.BoolVar(&jsonOutput, "json", false, "Emit structured inspection JSON")
+	fs.BoolVar(&migrationPrompt, "migration-prompt", false, "Generate a migration brief")
+	fs.StringVar(&to, "to", "", "Destination layout style")
+	fs.StringVar(&home, "home", "", "Destination home path for home layouts")
+	fs.StringVar(&outputPath, "output", "", "Output path for migration prompt")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("usage: changes doctor [--scope global|repo|all] [--explain] [--json]")
+	}
+	if explain && jsonOutput {
+		return fmt.Errorf("doctor: --explain and --json cannot be combined")
+	}
+	if migrationPrompt && (explain || jsonOutput) {
+		return fmt.Errorf("doctor: --migration-prompt cannot be combined with --explain or --json")
+	}
+	if !migrationPrompt && strings.TrimSpace(to) != "" {
+		return fmt.Errorf("doctor: --to requires --migration-prompt")
+	}
+	if !migrationPrompt && strings.TrimSpace(home) != "" {
+		return fmt.Errorf("doctor: --home requires --migration-prompt")
+	}
+	if !migrationPrompt && strings.TrimSpace(outputPath) != "" {
+		return fmt.Errorf("doctor: --output requires --migration-prompt")
+	}
+	if migrationPrompt && strings.TrimSpace(to) == "" {
+		return fmt.Errorf("doctor: --migration-prompt requires --to xdg|home")
+	}
+
+	cwd, repoRoot, insideRepo, err := a.currentLocation()
+	if err != nil {
+		return err
+	}
+	_ = cwd
+
+	requestedScope := scope
+	if strings.TrimSpace(requestedScope) == "" {
+		if insideRepo {
+			requestedScope = string(appsvc.DoctorScopeRepo)
+		} else {
+			requestedScope = string(appsvc.DoctorScopeGlobal)
+		}
+	}
+
+	doctorScope, err := parseDoctorScope(requestedScope)
+	if err != nil {
+		return err
+	}
+	if !insideRepo && (doctorScope == appsvc.DoctorScopeRepo || doctorScope == appsvc.DoctorScopeAll) {
+		return fmt.Errorf("doctor: %s scope requires running inside a Git repository", doctorScope)
+	}
+	if migrationPrompt && doctorScope == appsvc.DoctorScopeAll {
+		return fmt.Errorf("doctor: --migration-prompt requires --scope global or --scope repo")
+	}
+
+	var destinationStyle config.Style
+	if migrationPrompt {
+		destinationStyle, err = parseDoctorStyle(to)
+		if err != nil {
+			return err
+		}
+		if destinationStyle == config.StyleXDG && strings.TrimSpace(home) != "" {
+			return fmt.Errorf("doctor: --home is valid only when --to home")
+		}
+	}
+
+	result, err := appsvc.Doctor(ctx, appsvc.DoctorRequest{
+		RepoRoot:                repoRoot,
+		Scope:                   doctorScope,
+		GenerateMigrationPrompt: migrationPrompt,
+		DestinationStyle:        destinationStyle,
+		DestinationHome:         home,
+		Now:                     a.Now(),
+	})
+	if err != nil {
+		return err
+	}
+
+	if migrationPrompt {
+		if strings.TrimSpace(outputPath) != "" {
+			if err := os.WriteFile(outputPath, []byte(result.MigrationPrompt), 0o644); err != nil {
+				return fmt.Errorf("write doctor migration prompt: %w", err)
+			}
+			_, _ = fmt.Fprintf(a.Stdout, "wrote migration prompt to %s\n", outputPath)
+			return nil
+		}
+		_, _ = fmt.Fprint(a.Stdout, result.MigrationPrompt)
+		return nil
+	}
+
+	if jsonOutput {
+		encoder := json.NewEncoder(a.Stdout)
+		encoder.SetEscapeHTML(false)
+		return encoder.Encode(result)
+	}
+	if explain {
+		a.renderDoctorExplain(repoRoot, result)
+		return nil
+	}
+
+	a.renderDoctorConcise(repoRoot, result)
 	return nil
 }
 
@@ -367,18 +496,42 @@ func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
 
 func (a *App) repoRoot(ctx context.Context) (string, error) {
 	_ = ctx
-	cwd, err := os.Getwd()
+	_, root, insideRepo, err := a.currentLocation()
 	if err != nil {
-		return "", fmt.Errorf("get working directory: %w", err)
+		return "", err
 	}
-	root, err := reporoot.Detect(cwd)
-	if err != nil {
-		return "", fmt.Errorf("detect repo root: %w", err)
+	if !insideRepo {
+		return "", fmt.Errorf("detect repo root: %w", reporoot.ErrNotGitRepo)
 	}
 	return root, nil
 }
 
+func (a *App) currentLocation() (string, string, bool, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", "", false, fmt.Errorf("get working directory: %w", err)
+	}
+	root, err := reporoot.Detect(cwd)
+	if err != nil {
+		if errors.Is(err, reporoot.ErrNotGitRepo) {
+			return cwd, "", false, nil
+		}
+		return "", "", false, fmt.Errorf("detect repo root: %w", err)
+	}
+	return cwd, root, true, nil
+}
+
 func (a *App) fail(err error) error {
+	var authorityErr *config.AuthorityError
+	if errors.As(err, &authorityErr) && authorityErr.Status == config.StatusAmbiguous {
+		_, _ = fmt.Fprintf(
+			a.Stderr,
+			"error: %v; next: changes doctor --migration-prompt --scope %s --to xdg|home [--home PATH]\n",
+			err,
+			authorityErr.Scope,
+		)
+		return err
+	}
 	_, _ = fmt.Fprintf(a.Stderr, "error: %v\n", err)
 	return err
 }
@@ -438,6 +591,7 @@ Commands:
   init
   create
   status
+  doctor
   release
   render
   render profiles
@@ -483,6 +637,23 @@ Usage:
   changes status [--explain]
 
 Show the current version state, unreleased fragment counts, the policy-derived recommended bump, the recommended next final version, and active prerelease heads.
+`)
+	case "doctor":
+		body = strings.TrimSpace(`
+Usage:
+  changes doctor [--scope global|repo|all] [--explain] [--json]
+  changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH] [--output PATH]
+
+Inspect layout authority and migration state without mutating any layout.
+
+Options:
+  --scope <global|repo|all>       Scope to inspect
+  --explain                       Show candidate and warning detail
+  --json                          Emit structured inspection JSON
+  --migration-prompt              Generate an advisory Markdown migration brief
+  --to <xdg|home>                 Destination layout style for migration prompts
+  --home <path>                   Destination home path when --to home
+  --output <path>                 Write the migration prompt to a file
 `)
 	case "release":
 		body = strings.TrimSpace(`
@@ -591,4 +762,126 @@ func repoRelativePath(repoRoot, path string) string {
 		return rel
 	}
 	return path
+}
+
+func parseDoctorScope(raw string) (appsvc.DoctorScope, error) {
+	switch strings.TrimSpace(raw) {
+	case string(appsvc.DoctorScopeGlobal):
+		return appsvc.DoctorScopeGlobal, nil
+	case string(appsvc.DoctorScopeRepo):
+		return appsvc.DoctorScopeRepo, nil
+	case string(appsvc.DoctorScopeAll):
+		return appsvc.DoctorScopeAll, nil
+	default:
+		return "", fmt.Errorf("doctor: --scope must be global, repo, or all")
+	}
+}
+
+func parseDoctorStyle(raw string) (config.Style, error) {
+	switch strings.TrimSpace(raw) {
+	case string(config.StyleXDG):
+		return config.StyleXDG, nil
+	case string(config.StyleHome):
+		return config.StyleHome, nil
+	default:
+		return "", fmt.Errorf("doctor: --to must be xdg or home")
+	}
+}
+
+func (a *App) renderDoctorConcise(repoRoot string, result appsvc.DoctorResult) {
+	for _, scopeResult := range doctorScopeResults(result) {
+		line := fmt.Sprintf("%s: %s", scopeResult.Scope, scopeResult.Status)
+		if scopeResult.SelectedStyle != "" {
+			line = fmt.Sprintf("%s %s %s", line, scopeResult.SelectedStyle, doctorDisplayPath(repoRoot, scopeResult.Scope, scopeResult.SelectedRoot))
+		}
+		if len(scopeResult.Warnings) > 0 {
+			line = fmt.Sprintf("%s (%d warning%s)", line, len(scopeResult.Warnings), pluralSuffix(len(scopeResult.Warnings)))
+		}
+		_, _ = fmt.Fprintln(a.Stdout, line)
+	}
+}
+
+func (a *App) renderDoctorExplain(repoRoot string, result appsvc.DoctorResult) {
+	for index, scopeResult := range doctorScopeResults(result) {
+		if index > 0 {
+			_, _ = fmt.Fprintln(a.Stdout)
+		}
+		_, _ = fmt.Fprintf(a.Stdout, "%s\n", strings.ToUpper(scopeResult.Scope))
+		_, _ = fmt.Fprintf(a.Stdout, "Status: %s\n", scopeResult.Status)
+		if scopeResult.SelectedStyle != "" {
+			_, _ = fmt.Fprintf(a.Stdout, "Selected: %s at %s\n", scopeResult.SelectedStyle, doctorDisplayPath(repoRoot, scopeResult.Scope, scopeResult.SelectedRoot))
+		}
+		if len(scopeResult.PrecedenceInputs) > 0 {
+			_, _ = fmt.Fprintf(a.Stdout, "Precedence inputs: %s\n", strings.Join(scopeResult.PrecedenceInputs, ", "))
+		}
+		_, _ = fmt.Fprintln(a.Stdout, "Candidates:")
+		for _, candidate := range scopeResult.Candidates {
+			flags := make([]string, 0, 2)
+			if candidate.IsAuthoritative {
+				flags = append(flags, "authoritative")
+			}
+			if candidate.IsPreferred && !candidate.IsAuthoritative {
+				flags = append(flags, "preferred")
+			}
+			label := candidate.Status
+			if len(flags) > 0 {
+				label = fmt.Sprintf("%s (%s)", label, strings.Join(flags, ", "))
+			}
+			_, _ = fmt.Fprintf(
+				a.Stdout,
+				"- %s: %s at %s\n",
+				candidate.Style,
+				label,
+				doctorDisplayPath(repoRoot, scopeResult.Scope, candidate.Paths.Root),
+			)
+			for _, evidence := range candidate.Evidence {
+				path := evidence.Path
+				if evidence.Kind == "file" && scopeResult.Scope == string(config.ScopeRepo) {
+					path = doctorDisplayPath(repoRoot, scopeResult.Scope, evidence.Path)
+				}
+				_, _ = fmt.Fprintf(a.Stdout, "  - %s %s exists=%t path=%s\n", evidence.Kind, evidence.Name, evidence.Exists, path)
+			}
+		}
+		_, _ = fmt.Fprintln(a.Stdout, "Warnings:")
+		if len(scopeResult.Warnings) == 0 {
+			_, _ = fmt.Fprintln(a.Stdout, "- none")
+		}
+		for _, warning := range scopeResult.Warnings {
+			_, _ = fmt.Fprintf(
+				a.Stdout,
+				"- %s %s at %s\n",
+				warning.Status,
+				warning.Style,
+				doctorDisplayPath(repoRoot, scopeResult.Scope, warning.Path),
+			)
+		}
+		if scopeResult.RepairHint != "" {
+			_, _ = fmt.Fprintf(a.Stdout, "Repair hint: %s\n", scopeResult.RepairHint)
+		}
+	}
+}
+
+func doctorScopeResults(result appsvc.DoctorResult) []appsvc.DoctorScopeResult {
+	items := make([]appsvc.DoctorScopeResult, 0, 2)
+	if result.Global != nil {
+		items = append(items, *result.Global)
+	}
+	if result.Repo != nil {
+		items = append(items, *result.Repo)
+	}
+	return items
+}
+
+func doctorDisplayPath(repoRoot string, scope string, path string) string {
+	if scope == string(config.ScopeRepo) && strings.TrimSpace(repoRoot) != "" {
+		return repoRelativePath(repoRoot, path)
+	}
+	return path
+}
+
+func pluralSuffix(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }
