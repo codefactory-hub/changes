@@ -257,7 +257,7 @@ func TestAppHelpSurface(t *testing.T) {
 	if !strings.Contains(rootHelp, "Usage:") || !strings.Contains(rootHelp, "changes <command> [options]") {
 		t.Fatalf("root help missing usage:\n%s", rootHelp)
 	}
-	if !strings.Contains(rootHelp, "create") || !strings.Contains(rootHelp, "render profiles") {
+	if !strings.Contains(rootHelp, "create") || !strings.Contains(rootHelp, "render profiles") || !strings.Contains(rootHelp, "doctor") {
 		t.Fatalf("root help missing commands:\n%s", rootHelp)
 	}
 	if strings.Contains(rootHelp, "version next") {
@@ -310,6 +310,218 @@ func TestAppHelpSurface(t *testing.T) {
 	err = app.Run(context.Background(), []string{"changelog", "rebuild"})
 	if err == nil || !strings.Contains(stderr.String(), `unknown command "changelog"`) {
 		t.Fatalf("changelog should be rejected:\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
+	}
+}
+
+func TestDoctorDefaultsToRepoScopeInsideRepository(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	if err := writeManagedRepoConfigForStyle(t, repoRoot, config.StyleXDG, config.Default()); err != nil {
+		t.Fatalf("write xdg repo config: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 6, 9, 0, 0, 0, time.UTC)
+	}
+
+	if err := app.Run(context.Background(), []string{"doctor"}); err != nil {
+		t.Fatalf("doctor returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	if got := stdout.String(); !strings.Contains(got, "repo: authoritative xdg") {
+		t.Fatalf("doctor stdout missing repo default output:\n%s", got)
+	}
+	if strings.Contains(stdout.String(), "global:") {
+		t.Fatalf("doctor should not inspect global by default inside a repo:\n%s", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("doctor should not write stderr for normal inspection:\n%s", stderr.String())
+	}
+}
+
+func TestDoctorDefaultOutputStaysConciseAndExplainAddsDetail(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	if err := writeManagedRepoConfigForStyle(t, repoRoot, config.StyleXDG, config.Default()); err != nil {
+		t.Fatalf("write xdg repo config: %v", err)
+	}
+	if err := writeLegacyRepoConfigForStyle(t, repoRoot, config.StyleHome, config.Default()); err != nil {
+		t.Fatalf("write legacy home repo config: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 6, 9, 5, 0, 0, time.UTC)
+	}
+
+	if err := app.Run(context.Background(), []string{"doctor"}); err != nil {
+		t.Fatalf("doctor returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	concise := stdout.String()
+	if !strings.Contains(concise, "repo: authoritative xdg") {
+		t.Fatalf("concise output missing status line:\n%s", concise)
+	}
+	if strings.Contains(concise, "Candidates:") || strings.Contains(concise, "Precedence inputs:") {
+		t.Fatalf("concise output should stay terse:\n%s", concise)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"doctor", "--explain"}); err != nil {
+		t.Fatalf("doctor --explain returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	explain := stdout.String()
+	if !strings.Contains(explain, "Precedence inputs:") || !strings.Contains(explain, "Candidates:") {
+		t.Fatalf("explain output missing detail:\n%s", explain)
+	}
+	if !strings.Contains(explain, ".changes/config") || !strings.Contains(explain, "Warnings:") {
+		t.Fatalf("explain output missing candidate or warning detail:\n%s", explain)
+	}
+}
+
+func TestDoctorJSONOutputReturnsStructuredInspection(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	if err := writeManagedRepoConfigForStyle(t, repoRoot, config.StyleXDG, config.Default()); err != nil {
+		t.Fatalf("write xdg repo config: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 6, 9, 10, 0, 0, time.UTC)
+	}
+
+	if err := app.Run(context.Background(), []string{"doctor", "--json"}); err != nil {
+		t.Fatalf("doctor --json returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	body := stdout.String()
+	for _, fragment := range []string{
+		`"requested_scope":"repo"`,
+		`"repo":`,
+		`"selected_style":"xdg"`,
+		`"summary":`,
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("json output missing %q:\n%s", fragment, body)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("doctor --json should not write stderr:\n%s", stderr.String())
+	}
+}
+
+func TestDoctorHelpSurfaceIncludesInspectionAndMigrationFlags(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+
+	if err := app.Run(context.Background(), []string{"help", "doctor"}); err != nil {
+		t.Fatalf("help doctor returned error: %v", err)
+	}
+
+	body := stdout.String()
+	for _, line := range []string{
+		"changes doctor [--scope global|repo|all] [--explain] [--json]",
+		"changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH] [--output PATH]",
+		"--scope <global|repo|all>",
+		"--migration-prompt",
+		"--to <xdg|home>",
+		"--output <path>",
+	} {
+		if !strings.Contains(body, line) {
+			t.Fatalf("doctor help missing %q:\n%s", line, body)
+		}
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("help doctor should not write stderr:\n%s", stderr.String())
+	}
+}
+
+func TestDoctorMigrationPromptWritesStdoutByDefault(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	if err := writeManagedRepoConfigForStyle(t, repoRoot, config.StyleXDG, config.Default()); err != nil {
+		t.Fatalf("write xdg repo config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, ".config", "changes", "extra.toml"), []byte("extra"), 0o644); err != nil {
+		t.Fatalf("write extra config artifact: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 6, 9, 15, 0, 0, time.UTC)
+	}
+
+	if err := app.Run(context.Background(), []string{"doctor", "--migration-prompt", "--scope", "repo", "--to", "home", "--home", ".changes-next"}); err != nil {
+		t.Fatalf("doctor migration prompt returned error: %v\nstderr=%s", err, stderr.String())
+	}
+	if got := stdout.String(); !strings.Contains(got, "## Requested Migration") || !strings.Contains(got, "## Safety Rules") {
+		t.Fatalf("migration prompt stdout missing markdown body:\n%s", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("doctor migration prompt should not write stderr:\n%s", stderr.String())
+	}
+}
+
+func TestDoctorMigrationPromptWritesFileWhenOutputIsSet(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	if err := writeManagedRepoConfigForStyle(t, repoRoot, config.StyleXDG, config.Default()); err != nil {
+		t.Fatalf("write xdg repo config: %v", err)
+	}
+
+	outputPath := filepath.Join(repoRoot, "doctor-brief.md")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 6, 9, 20, 0, 0, time.UTC)
+	}
+
+	if err := app.Run(context.Background(), []string{"doctor", "--migration-prompt", "--scope", "repo", "--to", "home", "--output", outputPath}); err != nil {
+		t.Fatalf("doctor migration prompt returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	body := strings.TrimSpace(stdout.String())
+	if !strings.Contains(body, "wrote migration prompt to") || strings.Contains(body, "## Requested Migration") {
+		t.Fatalf("stdout should contain only a concise success line:\n%s", body)
+	}
+	raw, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if !strings.Contains(string(raw), "## Requested Migration") {
+		t.Fatalf("output file missing markdown body:\n%s", string(raw))
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("doctor migration prompt should not write stderr:\n%s", stderr.String())
 	}
 }
 
@@ -770,7 +982,7 @@ func TestAppRenderProfilesPrintsAuthorityWarningToStderr(t *testing.T) {
 	}
 }
 
-func TestAppCreateFailsWithTerseAmbiguousDoctorHint(t *testing.T) {
+func TestAmbiguousAuthorityFailurePrintsMigrationHint(t *testing.T) {
 	repoRoot := t.TempDir()
 	gitInit(t, repoRoot)
 	t.Chdir(repoRoot)
@@ -796,8 +1008,8 @@ func TestAppCreateFailsWithTerseAmbiguousDoctorHint(t *testing.T) {
 	if err == nil {
 		t.Fatalf("create returned nil error")
 	}
-	if !strings.Contains(stderr.String(), "error: repo authority is ambiguous") || !strings.Contains(stderr.String(), "changes doctor --scope repo") {
-		t.Fatalf("create stderr missing terse doctor hint:\n%s", stderr.String())
+	if !strings.Contains(stderr.String(), "error: repo authority is ambiguous") || !strings.Contains(stderr.String(), "changes doctor --scope repo") || !strings.Contains(stderr.String(), "changes doctor --migration-prompt --scope repo --to xdg|home") {
+		t.Fatalf("create stderr missing migration hint:\n%s", stderr.String())
 	}
 }
 
