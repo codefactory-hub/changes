@@ -9,7 +9,7 @@
 
 - [x] **GLBL-01**: `changes` prefers `CHANGES_HOME` over XDG environment variables when resolving the active global layout
 - [x] **GLBL-02**: `changes` can resolve global config, data, and state paths from either XDG-style directories or a single-root global layout
-- [ ] **GLBL-03**: `changes` can explain which global layout source won and why
+- [x] **GLBL-03**: `changes` can explain which global layout source won and why
 
 ### Repository Layout Resolution
 
@@ -21,13 +21,13 @@
 
 - [x] **AUTH-01**: If multiple supported global or repo-local layouts exist at once, `changes` fails instead of choosing silently
 - [x] **AUTH-02**: Ambiguity errors identify the competing authoritative candidates and suggest how to choose between them
-- [ ] **AUTH-03**: Ambiguity errors can direct the user to generate an LLM prompt to help merge or migrate to one authoritative location
+- [x] **AUTH-03**: Ambiguity errors can direct the user to generate an LLM prompt to help merge or migrate to one authoritative location
 
 ### Migration and Schema Metadata
 
 - [x] **MIGR-01**: `changes` records structural layout schema metadata in managed layouts without rewriting it during ordinary command execution
-- [ ] **MIGR-02**: `changes` can generate an LLM prompt for migrating between supported layouts using deterministically gathered source and destination details
-- [ ] **MIGR-03**: Migration assistance includes origin metadata, destination metadata, and any detected ambiguity or conflict signals
+- [x] **MIGR-02**: `changes` can generate an LLM prompt for migrating between supported layouts using deterministically gathered source and destination details
+- [x] **MIGR-03**: Migration assistance includes origin metadata, destination metadata, and any detected ambiguity or conflict signals
 - [x] **MIGR-04**: `changes` never dual-writes to origin and destination layouts during normal operation
 
 ### Commands and Documentation
@@ -61,16 +61,16 @@
 |-------------|-------|--------|
 | GLBL-01 | Phase 2 | Complete |
 | GLBL-02 | Phase 2 | Complete |
-| GLBL-03 | Phase 4 | Pending |
+| GLBL-03 | Phase 4 | Complete |
 | REPO-01 | Phase 2 | Complete |
 | REPO-02 | Phase 4 | Pending |
 | REPO-03 | Phase 2 | Complete |
 | AUTH-01 | Phase 3 | Complete |
 | AUTH-02 | Phase 3 | Complete |
-| AUTH-03 | Phase 4 | Pending |
+| AUTH-03 | Phase 4 | Complete |
 | MIGR-01 | Phase 2 | Complete |
-| MIGR-02 | Phase 4 | Pending |
-| MIGR-03 | Phase 4 | Pending |
+| MIGR-02 | Phase 4 | Complete |
+| MIGR-03 | Phase 4 | Complete |
 | MIGR-04 | Phase 3 | Complete |
 | CMD-01 | Phase 1 | Complete |
 | CMD-02 | Phase 1 | Complete |
@@ -86,4 +86,4 @@
 
 ---
 *Requirements defined: 2026-04-06*
-*Last updated: 2026-04-06 after design lock-in*
+*Last updated: 2026-04-07 after Phase 04 Plan 01 completion*

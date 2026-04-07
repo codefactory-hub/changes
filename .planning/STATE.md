@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_execute
-stopped_at: Phase 4 context gathered
-last_updated: "2026-04-07T02:35:53.414Z"
-last_activity: 2026-04-07 -- Phase 04 planning complete
+status: executing
+stopped_at: Completed 04-command-ux-and-migration-help-01-PLAN.md
+last_updated: "2026-04-07T02:54:05.046Z"
+last_activity: 2026-04-07
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 7
+  percent: 88
 ---
 
 # Project State
@@ -21,24 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-06)
 
 **Core value:** `changes` must make release metadata location predictable, inspectable, and safe even when multiple supported storage layouts are possible.
-**Current focus:** Phase 4: Command UX and Migration Help planned and verified
+**Current focus:** Phase 04 — command-ux-and-migration-help
 
 ## Current Position
 
-Phase: 4 of 5 (Command UX and Migration Help)
-Plan: 2 of 2 in current phase
+Phase: 04 (command-ux-and-migration-help) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-04-07 -- Phase 04 planning complete
+Last activity: 2026-04-07
 
-Progress: [███████░░░] 75%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 6
-- Average duration: 6 min
-- Total execution time: 0.7 hours
+- Total plans completed: 7
+- Average duration: 7m48s
+- Total execution time: 0.9 hours
 
 **By Phase:**
 
@@ -47,17 +47,18 @@ Progress: [███████░░░] 75%
 | 01-layout-proposal | 2 | 6 min | 3 min |
 | 02-resolution-core | 2 | 18 min | 9 min |
 | 03-authority-and-safety | 2 | 19m22s | 9m41s |
-| 04-command-ux-and-migration-help | 2 | - | - |
+| 04-command-ux-and-migration-help | 2 | 12m34s | 12m34s |
 
 **Recent Trend:**
 
-- Last 5 plans: 3 min, 10 min, 8 min, 6 min, 13 min
-- Trend: Stable on implementation-heavy plans with longer end-to-end wiring work
+- Last 5 plans: 10m17s, 8m28s, 6m22s, 13m, 12m34s
+- Trend: Stable on implementation-heavy plans with moderate end-to-end CLI wiring time
 
 | Phase 02 P01 | 10m17s | 2 tasks | 5 files |
 | Phase 02 P02 | 508 | 3 tasks | 7 files |
 | Phase 03-authority-and-safety P01 | 6m22s | 2 tasks | 7 files |
 | Phase 03-authority-and-safety P02 | 13m | 3 tasks | 8 files |
+| Phase 04-command-ux-and-migration-help P01 | 12m34s | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,9 @@ Recent decisions affecting current work:
 - [Phase 03-authority-and-safety]: Authority warning presentation stays in internal/cli, with repo paths rendered relative to the repo root and global paths left absolute.
 - [Phase 03-authority-and-safety]: Ordinary commands may proceed with one authoritative layout plus legacy-only or invalid siblings, but they surface concise stderr warnings for cleanup.
 - [Phase 03-authority-and-safety]: Every managed write path rechecks repo authority immediately before mutating disk so writes stay single-target.
+- [Phase 04-command-ux-and-migration-help]: The app layer now exposes one structured doctor result that drives concise, explain, and JSON rendering without separate resolver paths.
+- [Phase 04-command-ux-and-migration-help]: Migration prompts remain advisory Markdown briefs with deterministic path and inventory facts, and they never read or embed file bodies.
+- [Phase 04-command-ux-and-migration-help]: Ambiguous authority failures now add migration-brief guidance only at the CLI boundary so the typed authority contract stays unchanged below it.
 
 ### Pending Todos
 
@@ -93,10 +97,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- No current blockers; Phase 4 is ready to execute from the committed plan set.
+- No current blockers; Phase 04 Plan 02 is the next ready execution target.
 
 ## Session Continuity
 
-Last session: 2026-04-07T02:13:49.331Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-command-ux-and-migration-help/04-CONTEXT.md
+Last session: 2026-04-07T02:54:05.043Z
+Stopped at: Completed 04-command-ux-and-migration-help-01-PLAN.md
+Resume file: None
