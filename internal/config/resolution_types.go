@@ -56,13 +56,6 @@ type Candidate struct {
 	Evidence []CandidateEvidence
 }
 
-type AuthorityWarning struct {
-	Scope  Scope
-	Style  Style
-	Status ResolutionStatus
-	Path   string
-}
-
 type ScopeResolution struct {
 	Scope         Scope
 	Status        ResolutionStatus
