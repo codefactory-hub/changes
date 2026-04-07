@@ -1,0 +1,9 @@
+schema_version = 1
+scope = "repo"
+style = "xdg"
+
+[layout]
+  root = "$REPO_ROOT"
+  config = "$REPO_ROOT/.config/changes"
+  data = "$REPO_ROOT/.local/share/changes"
+  state = "$REPO_ROOT/.local/state/changes"
