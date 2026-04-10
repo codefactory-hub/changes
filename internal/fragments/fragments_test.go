@@ -83,6 +83,33 @@ func TestFormatParseRoundTrip(t *testing.T) {
 	}
 }
 
+func TestFormatOmitsZeroValueOrderingMetadata(t *testing.T) {
+	item := Fragment{
+		Metadata: Metadata{
+			Type:                 "changed",
+			ReleaseNotesPriority: 0,
+			DisplayOrder:         0,
+		},
+		Body: "Only the body matters here.",
+	}
+
+	raw := item.Format()
+	if strings.Contains(raw, "release_notes_priority") {
+		t.Fatalf("formatted fragment should omit zero release_notes_priority: %s", raw)
+	}
+	if strings.Contains(raw, "display_order") {
+		t.Fatalf("formatted fragment should omit zero display_order: %s", raw)
+	}
+
+	parsed, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatalf("Parse returned error: %v", err)
+	}
+	if parsed.ReleaseNotesPriority != 0 || parsed.DisplayOrder != 0 {
+		t.Fatalf("Parse(Format()) zero-value ordering mismatch: got %#v", parsed.Metadata)
+	}
+}
+
 func TestCreateDoesNotOverwriteExistingFragmentOnCollision(t *testing.T) {
 	repoRoot := t.TempDir()
 	cfg := config.Default()

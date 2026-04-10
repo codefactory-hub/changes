@@ -308,8 +308,8 @@ func (f Fragment) Format() string {
 		CustomerVisible      bool     `toml:"customer_visible,omitempty"`
 		SupportRelevance     bool     `toml:"support_relevance,omitempty"`
 		RequiresAction       bool     `toml:"requires_action,omitempty"`
-		ReleaseNotesPriority int      `toml:"release_notes_priority,omitempty"`
-		DisplayOrder         int      `toml:"display_order,omitempty"`
+		ReleaseNotesPriority *int     `toml:"release_notes_priority,omitempty"`
+		DisplayOrder         *int     `toml:"display_order,omitempty"`
 	}
 	metadata.Type = normalizeType(f.Type)
 	metadata.Bootstrap = f.Bootstrap
@@ -327,8 +327,12 @@ func (f Fragment) Format() string {
 	metadata.CustomerVisible = f.CustomerVisible
 	metadata.SupportRelevance = f.SupportRelevance
 	metadata.RequiresAction = f.RequiresAction
-	metadata.ReleaseNotesPriority = f.ReleaseNotesPriority
-	metadata.DisplayOrder = f.DisplayOrder
+	if f.ReleaseNotesPriority > 0 {
+		metadata.ReleaseNotesPriority = &f.ReleaseNotesPriority
+	}
+	if f.DisplayOrder > 0 {
+		metadata.DisplayOrder = &f.DisplayOrder
+	}
 
 	_ = toml.NewEncoder(&buf).Encode(metadata)
 	buf.WriteString("+++\n\n")

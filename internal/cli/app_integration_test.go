@@ -1884,6 +1884,44 @@ func TestCreateRequiresExplicitBodyOutsideTTY(t *testing.T) {
 	}
 }
 
+func TestCreateOmitsUnsetZeroIntegerFrontMatter(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	app.Now = func() time.Time {
+		return time.Date(2026, 4, 3, 9, 30, 0, 0, time.UTC)
+	}
+	app.Random = bytes.NewReader([]byte{2, 3, 4})
+	app.IsTTY = func() bool { return false }
+
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := app.Run(context.Background(), []string{"create", "--type", "changed", "Body text."}); err != nil {
+		t.Fatalf("create returned error: %v\nstderr=%s", err, stderr.String())
+	}
+
+	fragmentPath := strings.TrimSpace(stdout.String())
+	raw, err := os.ReadFile(fragmentPath)
+	if err != nil {
+		t.Fatalf("read fragment: %v", err)
+	}
+	if strings.Contains(string(raw), "release_notes_priority = 0") {
+		t.Fatalf("fragment should omit unset release_notes_priority:\n%s", raw)
+	}
+	if strings.Contains(string(raw), "display_order = 0") {
+		t.Fatalf("fragment should omit unset display_order:\n%s", raw)
+	}
+}
+
 func TestCreatePromptsForMissingFieldsInTTY(t *testing.T) {
 	repoRoot := t.TempDir()
 	gitInit(t, repoRoot)
