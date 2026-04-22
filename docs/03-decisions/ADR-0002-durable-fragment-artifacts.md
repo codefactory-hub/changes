@@ -1,4 +1,9 @@
-# ADR-0002 Durable Fragment Artifacts
+---
+created: 2026-04-02
+status: accepted
+---
+
+# ADR-0002: Keep fragment artifacts durable
 
 ## Status
 

@@ -1,4 +1,9 @@
-# ADR-0006 Homebrew Cask Distribution For Internal Releases
+---
+created: 2026-04-02
+status: accepted
+---
+
+# ADR-0006: Use Homebrew cask distribution for internal releases
 
 ## Status
 
@@ -21,4 +26,3 @@ Keep the GoReleaser configuration placeholder-driven so repository owners can su
 - the bootstrap release path matches the internal binary-delivery requirement
 - tap ownership and credentials remain configurable
 - future changes to signing, notarization, or distribution policy can evolve without changing the core `changes` data model
-

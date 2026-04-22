@@ -1,4 +1,9 @@
-# ADR-0005 Initial Stable Version Baseline
+---
+created: 2026-04-02
+status: accepted
+---
+
+# ADR-0005: Establish the initial stable version baseline
 
 ## Status
 

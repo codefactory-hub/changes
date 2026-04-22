@@ -1,4 +1,9 @@
-# ADR-0003 Parent-linked Release Records
+---
+created: 2026-04-02
+status: accepted
+---
+
+# ADR-0003: Represent releases as parent-linked records
 
 ## Status
 

@@ -1,4 +1,9 @@
-# ADR-0004 Rendered Outputs Are Views
+---
+created: 2026-04-02
+status: accepted
+---
+
+# ADR-0004: Treat rendered outputs as views
 
 ## Status
 

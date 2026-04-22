@@ -1,4 +1,9 @@
-# ADR-0001 Repo-local XDG Layout
+---
+created: 2026-04-02
+status: accepted
+---
+
+# ADR-0001: Use repo-local XDG layout
 
 ## Status
 

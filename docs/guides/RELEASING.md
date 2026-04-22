@@ -2,6 +2,8 @@
 
 This repository is set up to publish tagged releases through GoReleaser and then push a Homebrew cask into a separate internal tap repository.
 
+This guide follows [ADR-0006: Use Homebrew cask distribution for internal releases](../03-decisions/ADR-0006-homebrew-cask-distribution.md), [ADR-0008: Separate human release auth from automation and agent auth](../03-decisions/ADR-0008-separate-human-release-auth-from-automation-and-agent-auth.md), and [ADR-0009: Adopt provider-neutral release secret ingestion](../03-decisions/ADR-0009-adopt-provider-neutral-release-secret-ingestion.md).
+
 ## Expected release flow
 
 1. Push a `v*` tag to this repository.
@@ -33,6 +35,15 @@ Use these commands before pushing a release tag:
 `./scripts/verify-release-config.sh` requires GoReleaser `v2.10` or newer because this repo uses `homebrew_casks` in `.goreleaser.yaml`.
 `./scripts/build-release-snapshot.sh` supplies repo-local Go cache paths and placeholder release env values so a local snapshot build can run without production release credentials.
 
+## Release auth paths
+
+Use one of these two paths intentionally:
+
+- Human local rehearsal: inject release credentials from your shell, from a file-backed secret path, or from an external launcher or wrapper before running the local helper scripts.
+- Automation publishing: let GitHub Actions inject repository variables and secrets on the runner side.
+
+This repo does not treat a human desktop-auth session as the automation path, and it does not expose provider-specific secret-manager commands as part of the `changes` CLI surface.
+
 ## Required repository variables
 
 Set these as GitHub repository variables unless your hosting provider uses a different secret model:
@@ -51,6 +62,19 @@ Set these as GitHub repository variables unless your hosting provider uses a dif
 - `GITHUB_TOKEN` is provided by GitHub Actions for the release repository.
 - `CHANGES_HOMEBREW_TAP_TOKEN` must have write access to the tap repository.
 - Homebrew installs from the private tap may also require `HOMEBREW_GITHUB_API_TOKEN` on the user machine, depending on how the private cask is accessed.
+
+## Local secret contract
+
+The local release-helper scripts accept the tap credential through either of these inputs:
+
+- `CHANGES_HOMEBREW_TAP_TOKEN`
+- `CHANGES_HOMEBREW_TAP_TOKEN_FILE`
+
+If both are set, the scripts fail fast and ask you to choose one.
+
+The scripts do not accept raw secret values on argv. If you use 1Password or another secret manager locally, keep that provider-specific resolution in the launcher or wrapper that starts the script rather than in the `changes` tool core.
+
+This repository does not currently keep checked-in provider-mapping launcher profiles, and the release helpers do not read dotenv files directly.
 
 ## Notes generation
 
