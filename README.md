@@ -164,6 +164,7 @@ changes create --behavior fix "Fix release note rendering."
 changes create --public-api add --edit
 changes status
 changes status --explain
+changes status --json
 changes doctor [--scope global|repo|all] [--explain] [--json]
 changes doctor --scope repo --repair
 changes doctor --migration-prompt --scope global|repo --to xdg|home [--home PATH] [--output PATH]
@@ -177,6 +178,7 @@ changes release --override --version 1.2.0-rc.3
 changes render --version 1.2.0-rc.1 [--profile github_release] [--output path]
 changes render --latest --profile repository_markdown > CHANGELOG.md
 changes render profiles
+changes render profiles --json
 ```
 
 Interactive authoring prompts for optional `name` stem and body text when you run `create` in a TTY. Use `--edit` when the body needs richer Markdown than a single prompt line.
@@ -277,7 +279,7 @@ The current policy layer distinguishes between stable and unstable public APIs t
 - additive levers such as `public_api = "add"`, `behavior = "new"`, `dependency = "relax"`, and `runtime = "expand"` still suggest `minor`
 - `behavior = "fix"` still suggests `patch`
 
-That policy drives the tool's recommendation. `changes status --explain` and interactive `changes release` show the recommended bump and the evidence behind it. Non-interactive release requires an explicit decision: `changes release --accept` to accept the recommendation, or `changes release --override --bump <patch|minor|major>` / `changes release --override --version <exact>` to override it.
+That policy drives the tool's recommendation. `changes status --explain` and interactive `changes release` show the recommended bump and the evidence behind it. Use `changes status --json` for structured status output in scripts and agent workflows. Non-interactive release requires an explicit decision: `changes release --accept` to accept the recommendation, or `changes release --override --bump <patch|minor|major>` / `changes release --override --version <exact>` to override it.
 
 ## Rendering
 
@@ -285,6 +287,7 @@ That policy drives the tool's recommendation. `changes status --explain` and int
 - Render behavior is configured through named render profiles in `.config/changes/config.toml`.
 - Each render profile resolves to a concrete template pack at render time.
 - The built-in render profiles are `repository_markdown`, `github_release`, `tester_summary`, `debian_changelog`, and `rpm_changelog`.
+- Use `changes render profiles --json` for structured profile metadata in scripts and agent workflows.
 - `changes render --latest --profile repository_markdown` is the public path for rebuilding `CHANGELOG.md`.
 - Single-release profiles render only the selected `ReleaseBundle`.
 - Chain-style profiles walk `parent_version` backward from the chosen base release record and render each assembled bundle in the lineage.

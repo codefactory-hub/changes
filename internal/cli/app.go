@@ -33,12 +33,65 @@ type App struct {
 	Date     string
 }
 
+type statusJSON struct {
+	RepoRoot             string               `json:"repo_root"`
+	CurrentVersionLabel  string               `json:"current_version"`
+	CurrentVersionSource string               `json:"current_version_source"`
+	InitialReleaseTarget *string              `json:"initial_release_target,omitempty"`
+	PendingFragments     []statusFragmentJSON `json:"pending_fragments"`
+	PrereleaseHeads      []prereleaseHeadJSON `json:"prerelease_heads,omitempty"`
+	Recommendation       recommendationJSON   `json:"recommendation"`
+	RecommendedNextFinal string               `json:"recommended_next_final"`
+}
+
+type statusFragmentJSON struct {
+	ID      string `json:"id"`
+	Type    string `json:"type,omitempty"`
+	Title   string `json:"title,omitempty"`
+	Body    string `json:"body"`
+	Path    string `json:"path"`
+	Preview string `json:"preview"`
+}
+
+type prereleaseHeadJSON struct {
+	Version       string `json:"version"`
+	TargetVersion string `json:"target_version"`
+}
+
+type recommendationJSON struct {
+	Stability     string                   `json:"stability"`
+	SuggestedBump string                   `json:"suggested_bump"`
+	Assessments   []fragmentAssessmentJSON `json:"assessments"`
+}
+
+type fragmentAssessmentJSON struct {
+	FragmentID    string   `json:"fragment_id"`
+	SuggestedBump string   `json:"suggested_bump"`
+	Reasons       []string `json:"reasons"`
+}
+
+type renderProfilesJSON struct {
+	Profiles []renderProfileJSON `json:"profiles"`
+}
+
+type renderProfileJSON struct {
+	Name            string            `json:"name"`
+	Description     string            `json:"description"`
+	Mode            string            `json:"mode"`
+	DocumentHeader  string            `json:"document_header,omitempty"`
+	ReleaseTemplate string            `json:"release_template"`
+	EntryTemplate   string            `json:"entry_template"`
+	MaxChars        int               `json:"max_chars"`
+	OmissionNotice  string            `json:"omission_notice,omitempty"`
+	Metadata        map[string]string `json:"metadata,omitempty"`
+}
+
 func NewApp(stdout, stderr io.Writer) *App {
 	app := &App{
-		Stdout: stdout,
-		Stderr: stderr,
-		Stdin:  os.Stdin,
-		Now:    time.Now,
+		Stdout:  stdout,
+		Stderr:  stderr,
+		Stdin:   os.Stdin,
+		Now:     time.Now,
 		Version: "dev",
 		Commit:  "unknown",
 		Date:    "unknown",
@@ -218,12 +271,17 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var explain bool
+	var jsonOutput bool
 	fs.BoolVar(&explain, "explain", false, "Show policy evidence for the pending bump")
+	fs.BoolVar(&jsonOutput, "json", false, "Emit structured status JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
-		return fmt.Errorf("usage: changes status [--explain]")
+		return fmt.Errorf("usage: changes status [--explain] [--json]")
+	}
+	if explain && jsonOutput {
+		return fmt.Errorf("status: --explain and --json cannot be combined")
 	}
 
 	repoRoot, err := a.repoRoot(ctx)
@@ -235,6 +293,11 @@ func (a *App) runStatus(ctx context.Context, args []string) error {
 		return err
 	}
 	a.printAuthorityWarnings(repoRoot, result.AuthorityWarnings)
+	if jsonOutput {
+		encoder := json.NewEncoder(a.Stdout)
+		encoder.SetEscapeHTML(false)
+		return encoder.Encode(statusResultJSON(result))
+	}
 
 	_, _ = fmt.Fprintf(a.Stdout, "Current version: %s\n", result.CurrentVersionLabel)
 	_, _ = fmt.Fprintf(a.Stdout, "Current version source: %s\n", result.CurrentVersionSource)
@@ -579,8 +642,13 @@ func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
 	}
 	fs := flag.NewFlagSet("render profiles", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	var jsonOutput bool
+	fs.BoolVar(&jsonOutput, "json", false, "Emit structured profile JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("usage: changes render profiles [--json]")
 	}
 
 	repoRoot, err := a.repoRoot(ctx)
@@ -597,10 +665,93 @@ func (a *App) runRenderProfiles(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if jsonOutput {
+		encoder := json.NewEncoder(a.Stdout)
+		encoder.SetEscapeHTML(false)
+		return encoder.Encode(renderProfilesResultJSON(packs))
+	}
 	for _, pack := range packs {
 		_, _ = fmt.Fprintf(a.Stdout, "%s\t%s\t%s\n", pack.Name, pack.Mode, pack.Description)
 	}
 	return nil
+}
+
+func statusResultJSON(result appsvc.StatusResult) statusJSON {
+	out := statusJSON{
+		RepoRoot:             result.RepoRoot,
+		CurrentVersionLabel:  result.CurrentVersionLabel,
+		CurrentVersionSource: result.CurrentVersionSource,
+		PendingFragments:     make([]statusFragmentJSON, 0, len(result.PendingFragments)),
+		PrereleaseHeads:      make([]prereleaseHeadJSON, 0, len(result.PrereleaseHeads)),
+		Recommendation:       recommendationResultJSON(result.Recommendation),
+		RecommendedNextFinal: result.RecommendedNextFinal.String(),
+	}
+	if result.InitialReleaseTarget != nil {
+		value := result.InitialReleaseTarget.String()
+		out.InitialReleaseTarget = &value
+	}
+	for _, item := range result.PendingFragments {
+		out.PendingFragments = append(out.PendingFragments, statusFragmentJSON{
+			ID:      item.ID,
+			Type:    item.Type,
+			Title:   item.Title,
+			Body:    item.Body,
+			Path:    item.Path,
+			Preview: item.BodyPreview(),
+		})
+	}
+	for _, head := range result.PrereleaseHeads {
+		out.PrereleaseHeads = append(out.PrereleaseHeads, prereleaseHeadJSON{
+			Version:       head.Version,
+			TargetVersion: head.TargetVersion(),
+		})
+	}
+	return out
+}
+
+func recommendationResultJSON(recommendation semverpolicy.Recommendation) recommendationJSON {
+	out := recommendationJSON{
+		Stability:     string(recommendation.Stability),
+		SuggestedBump: string(recommendation.SuggestedBump),
+		Assessments:   make([]fragmentAssessmentJSON, 0, len(recommendation.Assessments)),
+	}
+	for _, assessment := range recommendation.Assessments {
+		out.Assessments = append(out.Assessments, fragmentAssessmentJSON{
+			FragmentID:    assessment.FragmentID,
+			SuggestedBump: string(assessment.SuggestedBump),
+			Reasons:       append([]string(nil), assessment.Reasons...),
+		})
+	}
+	return out
+}
+
+func renderProfilesResultJSON(packs []render.TemplatePack) renderProfilesJSON {
+	out := renderProfilesJSON{Profiles: make([]renderProfileJSON, 0, len(packs))}
+	for _, pack := range packs {
+		out.Profiles = append(out.Profiles, renderProfileJSON{
+			Name:            pack.Name,
+			Description:     pack.Description,
+			Mode:            pack.Mode,
+			DocumentHeader:  pack.DocumentHeader,
+			ReleaseTemplate: pack.ReleaseTemplate,
+			EntryTemplate:   pack.EntryTemplate,
+			MaxChars:        pack.MaxChars,
+			OmissionNotice:  pack.OmissionNotice,
+			Metadata:        cloneStringMap(pack.Metadata),
+		})
+	}
+	return out
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }
 
 func (a *App) repoRoot(ctx context.Context) (string, error) {
@@ -763,12 +914,16 @@ Options:
 	case "status":
 		body = strings.TrimSpace(`
 Usage:
-  changes status [--explain]
+  changes status [--explain] [--json]
 
 Show the current version state, unreleased fragment counts, the policy-derived recommended bump, the recommended next final version, and active prerelease heads.
+
+Options:
+  --explain                       Show policy evidence for the pending bump
+  --json                          Emit structured status JSON
 `)
 	case "doctor":
-	body = strings.TrimSpace(`
+		body = strings.TrimSpace(`
 Usage:
   changes doctor [--scope global|repo|all] [--explain] [--json]
   changes doctor --scope repo --repair
@@ -805,16 +960,19 @@ Usage:
   changes render --version <version> [--product <name>] [--profile <name>] [--output <path>]
   changes render --latest [--product <name>] [--profile <name>] [--output <path>]
   changes render --record <path> [--profile <name>] [--output <path>]
-  changes render profiles
+  changes render profiles [--json]
 
 Render one release or a release lineage through the selected template pack.
 `)
 	case "render profiles":
 		body = strings.TrimSpace(`
 Usage:
-  changes render profiles
+  changes render profiles [--json]
 
 List the available render profiles.
+
+Options:
+  --json                          Emit structured profile JSON
 `)
 	default:
 		body = strings.TrimSpace(`

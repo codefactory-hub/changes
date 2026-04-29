@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -80,6 +81,34 @@ func TestAppEndToEnd(t *testing.T) {
 	}
 
 	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"status", "--json"}); err != nil {
+		t.Fatalf("status --json returned error: %v", err)
+	}
+	var statusJSON struct {
+		CurrentVersionLabel  string `json:"current_version"`
+		InitialReleaseTarget string `json:"initial_release_target"`
+		PendingFragments     []struct {
+			ID      string `json:"id"`
+			Preview string `json:"preview"`
+		} `json:"pending_fragments"`
+		Recommendation struct {
+			SuggestedBump string `json:"suggested_bump"`
+		} `json:"recommendation"`
+		RecommendedNextFinal string `json:"recommended_next_final"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &statusJSON); err != nil {
+		t.Fatalf("status --json did not emit valid JSON: %v\n%s", err, stdout.String())
+	}
+	if statusJSON.CurrentVersionLabel != "unreleased" ||
+		statusJSON.InitialReleaseTarget != "0.1.0" ||
+		statusJSON.Recommendation.SuggestedBump != "patch" ||
+		statusJSON.RecommendedNextFinal != "0.1.0" ||
+		len(statusJSON.PendingFragments) != 1 ||
+		statusJSON.PendingFragments[0].Preview != "Fix release note rendering." {
+		t.Fatalf("unexpected status JSON: %#v", statusJSON)
+	}
+
+	stdout.Reset()
 	if err := app.Run(context.Background(), []string{"render", "profiles"}); err != nil {
 		t.Fatalf("render profiles returned error: %v", err)
 	}
@@ -94,6 +123,39 @@ func TestAppEndToEnd(t *testing.T) {
 		if !strings.Contains(profilesOut, name) {
 			t.Fatalf("render profiles missing %s:\n%s", name, profilesOut)
 		}
+	}
+
+	stdout.Reset()
+	if err := app.Run(context.Background(), []string{"render", "profiles", "--json"}); err != nil {
+		t.Fatalf("render profiles --json returned error: %v", err)
+	}
+	var profilesJSON struct {
+		Profiles []struct {
+			Name            string `json:"name"`
+			Mode            string `json:"mode"`
+			ReleaseTemplate string `json:"release_template"`
+			EntryTemplate   string `json:"entry_template"`
+		} `json:"profiles"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &profilesJSON); err != nil {
+		t.Fatalf("render profiles --json did not emit valid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(profilesJSON.Profiles) == 0 {
+		t.Fatalf("render profiles --json returned no profiles")
+	}
+	foundGitHubRelease := false
+	for _, profile := range profilesJSON.Profiles {
+		if profile.Name == config.RenderProfileGitHubRelease {
+			foundGitHubRelease = true
+			if profile.Mode != config.RenderModeSingleRelease ||
+				profile.ReleaseTemplate == "" ||
+				profile.EntryTemplate == "" {
+				t.Fatalf("unexpected github_release profile JSON: %#v", profile)
+			}
+		}
+	}
+	if !foundGitHubRelease {
+		t.Fatalf("render profiles --json missing %s: %#v", config.RenderProfileGitHubRelease, profilesJSON)
 	}
 
 	stdout.Reset()
@@ -1231,6 +1293,27 @@ func TestAppRenderProfilesPrintsAuthorityWarningToStderr(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "warning:") || !strings.Contains(stderr.String(), ".changes/config") {
 		t.Fatalf("render profiles stderr missing authority warning:\n%s", stderr.String())
+	}
+}
+
+func TestRenderProfilesRejectsUnexpectedArgs(t *testing.T) {
+	repoRoot := t.TempDir()
+	gitInit(t, repoRoot)
+	t.Chdir(repoRoot)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	app := NewApp(&stdout, &stderr)
+	if err := app.Run(context.Background(), []string{"init"}); err != nil {
+		t.Fatalf("init returned error: %v", err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	err := app.Run(context.Background(), []string{"render", "profiles", "extra"})
+	if err == nil || !strings.Contains(stderr.String(), "usage: changes render profiles [--json]") {
+		t.Fatalf("render profiles extra arg should fail:\nstdout=%s\nstderr=%s\nerr=%v", stdout.String(), stderr.String(), err)
 	}
 }
 
