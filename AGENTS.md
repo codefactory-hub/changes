@@ -64,13 +64,19 @@ Current governance records:
 - After a written repository plan is complete, additional trivial follow-up work may proceed without reopening the completed plan or creating a new plan.
 - Create a new written repository plan for follow-up work only when that follow-up work is itself non-trivial.
 
-## Go toolchain paths for agents
+## Go implementation and toolchain guidance
 
-Prefer plain Go commands first in this repository:
+Use the `golang-pro` skill for Go implementation, architecture, performance, or production-readiness work in this repository.
+
+This repository owns its Go toolchain with `.mise.toml`. After trusting the repo-local mise config, prefer mise-managed Go commands:
 
 ```bash
-go test ./...
+mise exec -- go test ./...
 ```
+
+Do not set `GOROOT` manually for repository commands. A stale or mismatched `GOROOT` can make the Go command use one toolchain version with another version's standard library.
+
+If mise refuses to load the local config because it is not trusted, either trust the repo-local `.mise.toml` intentionally or use an explicitly selected Go binary that matches the repository's configured toolchain. Avoid falling back to an unrelated ambient `go` command when it reports a different version or a mismatched `GOROOT`.
 
 Only add writable-path overrides when the environment actually requires them, such as a sandbox or permission error involving Go's cache or module workspace.
 
@@ -88,3 +94,5 @@ env GOCACHE=/tmp/changes-go-build go test ./...
 ```
 
 If a stricter sandbox still requires repo-local writable paths, use a repo-local fallback intentionally rather than by default.
+
+Prefer GoReleaser for release builds and packaging unless an accepted repository decision replaces the current release system.

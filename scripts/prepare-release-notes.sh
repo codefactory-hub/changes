@@ -9,6 +9,11 @@ compat_notes_path=".dist/release-notes.md"
 mkdir -p .dist
 mkdir -p "$(dirname "${release_notes_path}")"
 
+go_cmd=(go)
+if command -v mise >/dev/null 2>&1 && mise exec -- go version >/dev/null 2>&1; then
+  go_cmd=(mise exec -- go)
+fi
+
 write_placeholder() {
   printf '# %s\n\nRelease notes placeholder. Commit repo-local `changes` config and templates and create a first final release record before enabling generated release notes.\n' "${tag_name}" > "${release_notes_path}"
   cp "${release_notes_path}" "${compat_notes_path}"
@@ -19,7 +24,7 @@ if [[ ! -f .config/changes/config.toml ]]; then
   exit 0
 fi
 
-if ! go run ./cmd/changes render --version "${release_version}" --profile github_release --output "${release_notes_path}" 2>/dev/null; then
+if ! "${go_cmd[@]}" run ./cmd/changes render --version "${release_version}" --profile github_release --output "${release_notes_path}" 2>/dev/null; then
   write_placeholder
   printf 'prepare-release-notes: using placeholder release notes\n' >&2
   exit 0
